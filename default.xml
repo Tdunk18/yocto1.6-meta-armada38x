@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+
+  <default sync-j="3" revision="master"/>
+
+  <remote name="yocto"   fetch="http://git.yoctoproject.org" />
+  <remote name="oe"      fetch="https://github.com" />
+  <remote name="marvell" fetch="https://github.com/MarvellEmbeddedProcessors" />
+
+  <project remote="yocto" revision="daisy" name="git/poky" path="sources/poky"/>
+
+  <project remote="oe" revision="daisy" name="openembedded/meta-openembedded.git" path="sources/meta-openembedded"/>
+
+  <project remote="marvell" revision="yocto1.6-15t1" name="yocto1.6-meta-armada38x" path="sources/meta-armada38x">
+    <copyfile dest="README" src="README"/>
+    <copyfile dest="setup-environment" src="setup-environment"/>
+    <copyfile dest="write_image" src="write_image"/>
+  </project>
+
+</manifest>
