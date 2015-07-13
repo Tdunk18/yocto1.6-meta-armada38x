@@ -1,0 +1,57 @@
+diff -Nru openswan-2.6.37_a/linux/net/ipsec/defconfig openswan-2.6.37_b/linux/net/ipsec/defconfig
+--- openswan-2.6.37_a/linux/net/ipsec/defconfig	2011-10-28 23:11:53.000000000 +0200
++++ openswan-2.6.37_b/linux/net/ipsec/defconfig	2012-02-22 11:36:40.000000000 +0200
+@@ -56,8 +56,8 @@
+ CONFIG_KLIPS_IPCOMP=y
+ 
+ # To enable userspace-switchable KLIPS debugging, say 'y'.
+-CONFIG_KLIPS_DEBUG=y
++CONFIG_KLIPS_DEBUG=n
+ 
+ # OCF HW offloading, requires kernel patch
+-# CONFIG_KLIPS_OCF is not set
++CONFIG_KLIPS_OCF=y
+ 
+diff -Nru openswan-2.6.37_a/Makefile.inc openswan-2.6.37_b/Makefile.inc
+--- openswan-2.6.37_a/Makefile.inc	2011-10-28 23:11:53.000000000 +0200
++++ openswan-2.6.37_b/Makefile.inc	2012-02-22 11:35:31.000000000 +0200
+@@ -430,12 +430,12 @@
+ 
+ # Do we have Openssl libraries available for BIGNUM support?
+ # Required of HAVE_OCF support
+-HAVE_OPENSSL?=false
++HAVE_OPENSSL?=true
+ 
+ # Userland (IKE) Open Cryptographic Framework support (hw crypto offload)
+ # For Kernel level OCF support, enable CONFIG_KLIPS_OCF on a kernel that
+ # has support for OCF (inline or module)
+-HAVE_OCF?=false
++HAVE_OCF?=true
+ 
+ ifeq ($(HAVE_OCF),true)
+ HAVE_OPENSSL=true
+diff -Nru openswan-2.6.37_a/packaging/linus/config-all.h openswan-2.6.37_b/packaging/linus/config-all.h
+--- openswan-2.6.37_a/packaging/linus/config-all.h	2011-10-28 23:11:53.000000000 +0200
++++ openswan-2.6.37_b/packaging/linus/config-all.h	2012-02-22 11:37:47.000000000 +0200
+@@ -79,7 +79,8 @@
+ #  define CONFIG_KLIPS_OCF 1
+ # endif
+ #endif
+-#undef CONFIG_KLIPS_OCF
++//#undef CONFIG_KLIPS_OCF
++#define CONFIG_KLIPS_OCF 1
+ 
+ #ifndef CONFIG_KLIPS_ALG_AES_MAC
+ #define CONFIG_KLIPS_ALG_AES_MAC 1
+diff -Nru openswan-2.6.37_a/packaging/makefiles/module.defs openswan-2.6.37_b/packaging/makefiles/module.defs
+--- openswan-2.6.37_a/packaging/makefiles/module.defs	2011-10-28 23:11:53.000000000 +0200
++++ openswan-2.6.37_b/packaging/makefiles/module.defs	2012-02-22 11:38:31.000000000 +0200
+@@ -37,7 +37,7 @@
+ CONFIG_KLIPS_IPCOMP=y
+ 
+ # To enable userspace-switchable KLIPS debugging, say 'y'.
+-CONFIG_KLIPS_DEBUG=y
++CONFIG_KLIPS_DEBUG=n
+ 
+ #
+ #
