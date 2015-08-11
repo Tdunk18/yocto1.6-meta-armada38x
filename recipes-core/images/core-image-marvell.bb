@@ -5,7 +5,7 @@ IMAGE_INSTALL = "packagegroup-core-boot ${ROOTFS_PKGMANAGE_BOOTSTRAP} ${CORE_IMA
                  btrfs-tools util-linux-readprofile wireless-tools trace-cmd cryptsetup coreutils \
                  dosfstools dt e2fsprogs fftw hostap-daemon iproute2 libpcap nfs-utils \
                  openssh openssl rpcbind python-core sg3-utils squashfs-tools \
-                 valgrind samba openswan wireshark testfloat iperf \
+                 valgrind samba openswan testfloat iperf \
                  dhcp-server openssh iptables dnsmasq"
 
 LICENSE = "MIT"

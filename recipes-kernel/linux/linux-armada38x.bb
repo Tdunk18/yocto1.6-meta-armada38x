@@ -14,6 +14,6 @@ LOCALVERSION = "+yocto"
 SRCBRANCH = "3.10.39-armada38x-2014.T3"
 SRCREV = "e9d3d04a07fff114fa2904881160a17d8fb610e1"
 DEPENDS += "lzop-native bc-native"
-COMPATIBLE_MACHINE = "(armada38x-db)"
+COMPATIBLE_MACHINE = "(armada38x.*)"
 
 S = "${WORKDIR}/git"

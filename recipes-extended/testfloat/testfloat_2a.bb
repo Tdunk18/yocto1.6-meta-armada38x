@@ -1,5 +1,5 @@
 DESCRIPTION = "A program for testing floating-point implementation"
-LICENSE = "TestFloat"
+LICENSE = "BSD-like"
 
 LIC_FILES_CHKSUM = "file://testfloat/testfloat.txt;beginline=87;endline=95;md5=9172cf2272bf9befeef3f63aa7ff4159"
 
