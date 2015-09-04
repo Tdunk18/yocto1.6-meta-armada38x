@@ -5,8 +5,8 @@ DEPENDS = "u-boot-mkimage-native"
 
 PV = "r1"
 
-SRC_URI = "file://armada38x-db-bootscript \
-           file://armada38x-clearfog-bootscript \
+SRC_URI = "file://388-db-gp-bootscript \
+           file://clearfog-bootscript \
            file://README \
            file://LICENSE \
 "
@@ -54,4 +54,4 @@ addtask deploy after do_install before do_build
 do_compile[noexec] = "1"
 
 PACKAGE_ARCH = "${MACHINE_ARCH}"
-COMPATIBLE_MACHINE = "(armada38x-db|armada38x-clearfog)"
+COMPATIBLE_MACHINE_armada38x = "${MACHINE}"

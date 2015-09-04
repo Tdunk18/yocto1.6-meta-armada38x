@@ -3,16 +3,18 @@ require recipes-bsp/u-boot/u-boot.inc
 DESCRIPTION = "U-Boot for Marvell Armada 38x"
 LICENSE = "GPLv2+"
 LIC_FILES_CHKSUM = "file://README;md5=90fb5e9af37e63370e37e9a9178cc427"
-COMPATIBLE_MACHINE = "armada38x-db"
+COMPATIBLE_MACHINE_armada38x = "armada38x"
 
 PROVIDES = "u-boot"
 
 PV = "v2013.01-2014_T3.0"
 
-SRCBRANCH = "2013.01-armada38x-2014.T3"
-SRCREV = "d25397c8f17ea4a12f794500411dbbe0d87a9872"
+SRCBRANCH = "u-boot-2013.01-14t3"
+SRCBRANCH_clearfog = "u-boot-2013.01-15t1"
+SRCREV = "0e7091867176f8aa075d49a71b313edfce2680b0"
+SRCREV_clearfog = "c1d6f3e8e315c3843147c74013ed915231774a58"
 SRC_URI = "git://git@github.com/EmbeddedProcessorsSW/u-boot-armada38x;branch=${SRCBRANCH};protocol=ssh \
-           file://u-boot-2013.01-2014_T3.0_hard_vfp.patch \
+           file://u-boot-2013.01_hard_vfp.patch \
 "
 S = "${WORKDIR}/git"
 
@@ -30,7 +32,14 @@ do_compile () {
 	fi
 
 	export CROSS_COMPILE=${TARGET_PREFIX}
-	export CROSS_COMPILE_BH=${TARGET_PREFIX}
-	perl build.pl -f spi -b ${UBOOT_MARVELL_MACHINE} -v "yocto" -i spi -c
-	cp -f u-boot-a38x-yocto-spi.bin u-boot.bin
+
+	if [ "${UBOOT_MARVELL_MACHINE}" == "armada_38x_clearfog" ]
+	then
+		make ${UBOOT_MARVELL_MACHINE}_config
+		make u-boot.mmc
+	else
+		export CROSS_COMPILE_BH=${TARGET_PREFIX}
+		perl build.pl -f spi -b ${UBOOT_MARVELL_MACHINE} -v "yocto" -i spi -c
+		cp -f u-boot-a38x-yocto-spi.bin u-boot.bin
+	fi
 }

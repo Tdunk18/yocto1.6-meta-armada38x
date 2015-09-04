@@ -29,7 +29,7 @@ usage()
     echo -e "\nUsage: source $PROGNAME <build-dir>
     <build-dir>: specifies the build directory location (required)
 
-If undefined, this script will set \$MACHINE to 'armada38x-db'.
+If undefined, this script will set \$MACHINE to '388-db-gp'.
 "
 
     ls sources/*/conf/machine/*.conf > /dev/null 2>&1
@@ -85,7 +85,7 @@ if [ "$(whoami)" = "root" ]; then
 fi
 
 if [ -z "$MACHINE" ]; then
-    MACHINE='armada38x-db'
+    MACHINE='388-db-gp'
 fi
 
 # Check the machine type specified

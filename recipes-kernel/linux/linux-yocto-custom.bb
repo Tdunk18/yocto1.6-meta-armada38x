@@ -42,4 +42,5 @@ SRCREV_armada38x = "42abc0893829cedb8cf9c9855f3b3e93f6a9c4c0"
 SRC_URI_armada38x = "git://git@github.com/EmbeddedProcessorsSW/linux-armada38x.git;branch=${KBRANCH};protocol=ssh;nocheckout=1 \
 					 file://defconfig"
 					 
-
+SRC_URI_append_armada38x-be += " file://big-endian.cfg"
+SRC_URI_append_clearfog += " file://add-clearfog-dts.patch"
