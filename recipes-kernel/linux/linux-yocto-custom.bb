@@ -25,6 +25,7 @@
 #
 
 require recipes-kernel/linux/linux-yocto.inc
+require linux-yocto-custom/linux-yocto-custom-source.inc
 
 PR = "r1"
 PV = "${LINUX_VERSION}+git${SRCPV}"
@@ -36,11 +37,8 @@ COMPATIBLE_MACHINE_armada38x = "${MACHINE}"
 # kernel cannot be built out of tree
 B = "${S}"
 
-KBRANCH_armada38x = "3.10"
-SRCREV_armada38x = "42abc0893829cedb8cf9c9855f3b3e93f6a9c4c0"
-
-SRC_URI_armada38x = "git://git@github.com/EmbeddedProcessorsSW/linux-armada38x.git;branch=${KBRANCH};protocol=ssh;nocheckout=1 \
-					 file://defconfig"
+SRC_URI_armada38x += "file://defconfig \
+"
 					 
 SRC_URI_append_armada38x-be += " file://big-endian.cfg"
 SRC_URI_append_clearfog += " file://add-clearfog-dts.patch"
