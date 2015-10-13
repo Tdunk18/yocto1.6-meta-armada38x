@@ -5,7 +5,9 @@ SECTION = "libs"
 LICENSE = "LGPL-3.0+ & GPL-3.0+"
 LIC_FILES_CHKSUM = "file://talloc.c;beginline=11;endline=26;md5=a10f1de43976e2ab16decd697c134776"
 
-SRC_URI = "http://samba.org/ftp/${BPN}/${BPN}-${PV}.tar.gz"
+SRC_URI = "http://samba.org/ftp/${BPN}/${BPN}-${PV}.tar.gz \
+           file://cross-answers.txt \
+"
 SRC_URI[md5sum] = "3e285de2228ae67ff0a0f5cec658f627"
 SRC_URI[sha256sum] = "7aa5f75b22d4ef9c737b25515f2a2837ddc13014ff4ac6e58dd9e311f41f2cb0"
 
