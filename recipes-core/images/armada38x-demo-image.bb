@@ -28,7 +28,7 @@ kernel-base kernel-devicetree kernel-image kernel-modules \
 killall kmod less libacl libasm libattr libbz2 libcap libcomerr libcrypto \
 libdw libe2p libelf libevent libext2fs libffi libgcc libgcrypt libgpg-error \
 libhandle libkmod libnfsidmap libpcap libpci libpcre libpython2 libss libssl \
-libstdc++ libsysfs libtasn1 libtdb libtirpc liburcu libwbclient libwrap \
+libstdc++ libsysfs libtasn1 libtirpc liburcu libwbclient libwrap \
 libxml2 lighttpd logrotate lttng-modules lttng-tools lttng-ust lvm2 lzo m4 \
 make makedevs mc mdadm mktemp mv-cesa-tool ncurses netbase net-tools nfs-utils \
 ocf-linux openssl openswan patch pax pciutils perf perl popt ppp \
