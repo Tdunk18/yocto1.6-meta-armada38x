@@ -7,18 +7,17 @@ COMPATIBLE_MACHINE_armada38x = "armada38x"
 
 PROVIDES = "u-boot"
 
-PV = "v2013.01-2014_T3.0"
+# Support for fetching and building U-Boot from Marvell GitHub
+require u-boot-armada38x/source-github.inc
 
-SRCBRANCH_armada38x = "u-boot-2013.01-15t1"
-SRCBRANCH_clearfog = "u-boot-2013.01-15t1-clearfog"
-SRCREV_armada38x = "b21a7137318cdccd1d6569c27dddd33447328770"
-SRCREV_clearfog = "c1d6f3e8e315c3843147c74013ed915231774a58"
-SRC_URI = "git://git@github.com/MarvellEmbeddedProcessors/u-boot-armada38x;branch=${SRCBRANCH};protocol=ssh \
-           file://u-boot-2013.01_hard_vfp.patch \
-"
-S = "${WORKDIR}/git"
+# Support for building U-Boot downloaded from Marvell Extranet
+#require u-boot-armada38x/source-extranet.inc
+
+PV ?= "${UBOOT_VERSION}-${UBOOT_MARVELL_VERSION}"
 
 PACKAGE_ARCH = "${MACHINE_ARCH}"
+
+S = "${WORKDIR}/git"
 
 do_compile () {
 	unset LDFLAGS
