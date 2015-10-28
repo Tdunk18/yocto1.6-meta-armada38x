@@ -25,20 +25,27 @@
 #
 
 require recipes-kernel/linux/linux-yocto.inc
-require linux-yocto-custom/linux-yocto-custom-source.inc
 
-PR = "r1"
-PV = "${LINUX_VERSION}+git${SRCPV}"
+# Support for fetching and building kernel from Marvell GitHub
+require linux-yocto-custom/source-github.inc
 
-LINUX_VERSION_armada38x = "3.10.70"
+# Support for building kernel downloaded from Marvell Extranet
+#require linux-yocto-custom/source-extranet.inc
+
+PV ?= "${LINUX_VERSION}-${MARVELL_LINUX_VERSION}"
+PR = "r0"
 LINUX_VERSION_EXTENSION_armada38x = "-marvell"
 COMPATIBLE_MACHINE_armada38x = "${MACHINE}"
 
 # kernel cannot be built out of tree
 B = "${S}"
 
-SRC_URI_armada38x += "file://defconfig \
-"
-					 
+SRC_URI_append_armada38x += "file://enable-ftrace.cfg"
 SRC_URI_append_armada38x-be += " file://big-endian.cfg"
 SRC_URI_append_clearfog += " file://add-clearfog-dts.patch"
+
+do_kernel_configme() {
+    make mvebu_lsp_defconfig
+    sccs="${@" ".join(find_sccs(d))}"
+    cat $sccs >> .config
+}
