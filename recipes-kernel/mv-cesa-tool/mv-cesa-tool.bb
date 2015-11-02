@@ -4,6 +4,9 @@ LIC_FILES_CHKSUM = "file://COPYING;md5=d7810fab7487fb0aad327b76f1be7cd7"
 
 inherit module
 
+DEPENDS = "virtual/kernel"
+do_configure[depends] += "virtual/kernel:do_populate_sysroot"
+
 SRC_URI = "file://Makefile \
            file://COPYING \
           "
