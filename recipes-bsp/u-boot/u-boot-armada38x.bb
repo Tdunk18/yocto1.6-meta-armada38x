@@ -7,17 +7,16 @@ COMPATIBLE_MACHINE_armada38x = "armada38x"
 
 PROVIDES = "u-boot"
 
+PV = "${UBOOT_VERSION}-${UBOOT_MARVELL_VERSION}"
+S = "${WORKDIR}/u-boot-${UBOOT_VERSION}/"
+
 # Support for fetching and building U-Boot from Marvell GitHub
 require u-boot-armada38x/source-github.inc
 
 # Support for building U-Boot downloaded from Marvell Extranet
 #require u-boot-armada38x/source-extranet.inc
 
-PV ?= "${UBOOT_VERSION}-${UBOOT_MARVELL_VERSION}"
-
 PACKAGE_ARCH = "${MACHINE_ARCH}"
-
-S = "${WORKDIR}/git"
 
 do_compile () {
 	unset LDFLAGS

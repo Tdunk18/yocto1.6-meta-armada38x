@@ -10,3 +10,4 @@ SRC_URI = "git://git@github.com/MarvellEmbeddedProcessors/u-boot-armada38x;branc
 "
 
 #PV = "${LINUX_VERSION}+git${SRCPV}"       # for versioning by git commit
+S = "${WORKDIR}/git"

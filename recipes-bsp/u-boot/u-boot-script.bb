@@ -5,8 +5,7 @@ DEPENDS = "u-boot-mkimage-native"
 
 PV = "r1"
 
-SRC_URI = "file://388-db-gp-bootscript \
-           file://clearfog-bootscript \
+SRC_URI = "file://*-bootscript \
            file://README \
            file://LICENSE \
 "
