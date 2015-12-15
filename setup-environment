@@ -115,23 +115,10 @@ if [ -e sources/oe-core ]; then
 fi
 
 # Ensure all files in sources/base are kept in sync with project root
-updated=
 for f in $CWD/sources/meta-armada38x/setup-environment $CWD/sources/meta-armada38x/write_image; do
     file="$(basename $f)"
-    if [ "$file" = "conf" ] || echo $file | grep -q '~$'; then
-        continue
-    fi
-
-    if ! cmp -s "$file" "$f"; then
-        updated="true"
-        [ -e $file ] && chmod u+w $file
-        cp $f $file
-    fi
+    ln -sf $f $file
 done
-if [ "$updated" = "true" ]; then
-    echo "The project root content has been updated. Please run '$PROGNAME' again."
-    return
-fi
 
 cd $OEROOT
 
