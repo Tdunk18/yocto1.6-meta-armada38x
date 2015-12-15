@@ -297,15 +297,20 @@ unmount_partition() {
 # Make sure we have the tools we need
 require_utils
 
-if [ "$#" -ne 1 ]; then
+if [ "$#" -ne 1 && "$#" -ne 2 ]; then
   prompt \
-"Usage: sudo ./write_image.sh IMAGE
+"Usage: sudo ./write_image.sh IMAGE [U-BOOT.MMC]
+
 Write an image file to a USB key or SD card for use in a
-Marvell Armada38x board.
+Marvell Armada38x board.  If your board loads U-Boot from
+this device (including the Clearfog), specify the path to
+u-boot.mmc also.
 
-IMAGE specifies the path to the image you want to write, such as:
+IMAGE (and optionally U-BOOT.MMC) specify the path to
+the image you want to write.
 
-  sudo ./write_image build/tmp/deploy/images/armada38x-db/core-image-base-armada38x.tar.bz2
+Ex:
+$ sudo ./write_image build/tmp/deploy/images/clearfog/core-image-base-clearfog.tar.bz2 build/tmp/deploy/images/clearfog/u-boot.mmc
 "
   quit
 fi
@@ -313,7 +318,7 @@ fi
 image_file=$(readlink -f "$1")
 
 if [ -n "${2-}" ]; then
-	user_choice=$(readlink -f "$2")
+	uboot_file=$(readlink -f "$2")
 fi
 disk_needed=$(roundup $(ls -l "$image_file" | awk '{print $5}'))
 
@@ -390,10 +395,17 @@ done
 echo "copying... (this may take several minutes)"
 
 # Create partition table
+echo "creating partition table"
 parted -a optimal -s /dev/${user_choice} mklabel msdos
 parted -a optimal -s /dev/${user_choice} mkpart primary ext2 0% 100%
 partprobe
 parted /dev/${user_choice} print
+
+# write the u-boot image, if specified
+if [ -n "${uboot_file-}" ]; then
+  echo "writing u-boot image: ${user_choice}"
+  dd if=${uboot_file} of=/dev/${user_choice} bs=512 seek=1
+fi
 
 mkdir -p ${WORKDIR}/mnt
 if [ -e /dev/${user_choice}1 ]; then
@@ -404,6 +416,8 @@ fi
 
 mkfs.ext2 ${user_part}
 mount ${user_part} ${WORKDIR}/mnt
+
+echo "extracting RFS"
 tar xf "$image_file" -C ${WORKDIR}/mnt ||
   ufatal "Unable to write the image."
 sync
