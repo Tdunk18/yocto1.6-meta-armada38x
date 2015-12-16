@@ -1,0 +1,56 @@
+# meta-armada38x Getting Started Guide
+
+BSP layer supporting Armada 38x machines, including "388-db-gp" and "clearfog"
+
+
+# System Requirements
+
+* We recommend building on **Ubuntu 14.04 LTS**.  For a full list of supported distributions, consult the Yocto manual at http://www.yoctoproject.org/docs/1.6.2/ref-manual/ref-manual.html#detailed-supported-distros.
+
+* If you are using a supported Ubuntu or Debian distribution, the necessary support packages are shown in the following command:
+
+        $ sudo apt-get install gawk curl wget git-core diffstat unzip texinfo gcc-multilib build-essential chrpath libsdl1.2-dev xterm
+
+
+# download_bsp.sh
+
+* If this is your first time using Git on your host, configure your Git identity:
+
+        $ git config --global user.email "you@example.com"
+        $ git config --global user.name "Your Name"
+
+* To initialize the BSP and syncronize with GitHub:
+
+        $ sudo apt-get install curl
+        $ curl -L http://goo.gl/orkGm1 > download_bsp.sh
+        $ chmod a+x download_bsp.sh
+        $ ./download_bsp.sh
+
+* This script will install `repo` to **~/bin**, then synchronize with the source repositories. The BSP will be installed to **$HOME/armada38x-bsp** by default.
+
+> **NOTE:** You can run '~/bin/repo sync' again in this directory to pull any additional changes from upstream at any time.
+
+
+## Builds
+* Use the `setup-environment` script to set up a new build environment. The following example creates the build directory, configured for the Armada 388 DB-GP machine. It will automatically place you in the build directory after completing.
+
+> **NOTE:** `setup-environment` is sourced with the dot command `.`, not run directly.
+
+        $ cd $HOME/armada38x-bsp
+        $ MACHINE=388-db-gp . setup-environment build/
+* Start running a build.
+
+        $ bitbake core-image-base
+
+
+## Write Image
+* To write a built image to an SD card, USB key, or SATA drive, use `write_image`.
+
+* 388-db-gp machine:
+
+        $ sudo ./write_image build/tmp/deploy/images/388-db-gp/core-image-base-388-db-gp.tar.bz2
+
+* clearfog machine (includes u-boot.mmc):
+
+        $ sudo ./write_image build/tmp/deploy/images/clearfog/core-image-base-clearfog.tar.bz2 build/tmp/deploy/images/clearfog/u-boot.mmc
+
