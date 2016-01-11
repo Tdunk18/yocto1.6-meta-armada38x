@@ -40,12 +40,9 @@ COMPATIBLE_MACHINE_armada38x = "${MACHINE}"
 # kernel cannot be built out of tree
 B = "${S}"
 
-SRC_URI_append_armada38x += "file://enable-ftrace.cfg"
-SRC_URI_append_armada38x-be += " file://big-endian.cfg"
-SRC_URI_append_clearfog += " file://add-clearfog-dts.patch"
+SRC_URI_append_armada38x += "file://defconfig \
+                             file://enable-ftrace.cfg \
+"
 
-do_kernel_configme() {
-    make mvebu_lsp_defconfig
-    sccs="${@" ".join(find_sccs(d))}"
-    cat $sccs >> .config
-}
+SRC_URI_append_armada38x-be += "file://big-endian.cfg"
+SRC_URI_append_clearfog += "file://add-clearfog-dts.patch"
