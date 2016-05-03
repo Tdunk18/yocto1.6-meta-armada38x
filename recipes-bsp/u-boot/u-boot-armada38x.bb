@@ -16,6 +16,16 @@ require u-boot-armada38x/source-github.inc
 # Support for building U-Boot downloaded from Marvell Extranet
 #require u-boot-armada38x/source-extranet.inc
 
+SRC_URI += "file://0001-Revert-bin_header_debug-add-XOR-engine-based-memtest.patch \
+            file://0002-Revert-bin_header_debug-add-memory-ir-and-training-c.patch \
+            file://0003-Revert-bin_header_debug-add-support-for-commands-in-.patch \
+            file://0004-Revert-bin_header_debug-add-implementation-of-C-libr.patch \
+            file://0005-remove-msoft-float-from-PLATFORM_RELFLAGS.patch \
+            file://0006-change-bootcmd-to-use-stage_boot.patch \
+"
+
+#file://0005-set-USE_PRIVATE_LIBGCC.patch
+
 PACKAGE_ARCH = "${MACHINE_ARCH}"
 
 do_compile () {

@@ -1,0 +1,1849 @@
+From bc30d5cbe19bb538ac7810ac097f99101cca9de2 Mon Sep 17 00:00:00 2001
+From: Adam Lussier <adam.lussier@timesys.com>
+Date: Tue, 3 May 2016 16:30:01 -0400
+Subject: [PATCH 1/6] Revert "bin_header_debug: add XOR engine based memtest"
+
+This reverts commit b3644dcfcc352629cc59e616ce071334fab2a5aa.
+---
+ tools/marvell/bin_hdr/inc/common/gtOs/mvXor.h      | 264 -----------------
+ tools/marvell/bin_hdr/inc/common/gtOs/mvXorRegs.h  | 280 ------------------
+ tools/marvell/bin_hdr/platform/Makefile            |   2 +-
+ .../marvell/bin_hdr/platform/utils/debug/command.c |   5 +-
+ .../bin_hdr/platform/utils/debug/xor_memtest.c     | 314 ---------------------
+ .../bin_hdr/platform/utils/debug/xor_memtest.h     | 145 ----------
+ .../bin_hdr/src_ddr/ddr3libv2/h/Os/gtOs/mvXor.h    | 264 +++++++++++++++++
+ .../src_ddr/ddr3libv2/h/Os/gtOs/mvXorRegs.h        | 280 ++++++++++++++++++
+ .../bin_hdr/src_ddr/ddr3libv2/src/Os/gtOs/mvXor.c  | 150 +---------
+ 9 files changed, 560 insertions(+), 1144 deletions(-)
+ delete mode 100644 tools/marvell/bin_hdr/inc/common/gtOs/mvXor.h
+ delete mode 100644 tools/marvell/bin_hdr/inc/common/gtOs/mvXorRegs.h
+ delete mode 100644 tools/marvell/bin_hdr/platform/utils/debug/xor_memtest.c
+ delete mode 100644 tools/marvell/bin_hdr/platform/utils/debug/xor_memtest.h
+ create mode 100644 tools/marvell/bin_hdr/src_ddr/ddr3libv2/h/Os/gtOs/mvXor.h
+ create mode 100644 tools/marvell/bin_hdr/src_ddr/ddr3libv2/h/Os/gtOs/mvXorRegs.h
+
+diff --git a/tools/marvell/bin_hdr/inc/common/gtOs/mvXor.h b/tools/marvell/bin_hdr/inc/common/gtOs/mvXor.h
+deleted file mode 100644
+index 678a129..0000000
+--- a/tools/marvell/bin_hdr/inc/common/gtOs/mvXor.h
++++ /dev/null
+@@ -1,264 +0,0 @@
+-/*******************************************************************************
+-Copyright (C) Marvell International Ltd. and its affiliates
+-This software file (the "File") is owned and distributed by Marvell
+-International Ltd. and/or its affiliates ("Marvell") under the following
+-alternative licensing terms.  Once you have made an election to distribute the
+-File under one of the following license alternatives, please (i) delete this
+-introductory statement regarding license alternatives, (ii) delete the two
+-license alternatives that you have not elected to use and (iii) preserve the
+-Marvell copyright notice above.
+-
+-********************************************************************************
+-Marvell Commercial License Option
+-
+-If you received this File from Marvell and you have entered into a commercial
+-license agreement (a "Commercial License") with Marvell, the File is licensed
+-to you under the terms of the applicable Commercial License.
+-
+-********************************************************************************
+-Marvell GPL License Option
+-If you received this File from Marvell, you may opt to use, redistribute and/or
+-modify this File in accordance with the terms and conditions of the General
+-Public License Version 2, June 1991 (the "GPL License"), a copy of which is
+-available along with the File in the license.txt file or by writing to the Free
+-Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 or
+-on the worldwide web at http://www.gnu.org/licenses/gpl.txt.
+-
+-THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE IMPLIED
+-WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE ARE EXPRESSLY
+-DISCLAIMED.  The GPL License provides additional details about this warranty
+-disclaimer.
+-********************************************************************************
+-Marvell BSD License Option
+-If you received this File from Marvell, you may opt to use, redistribute and/or
+-modify this File under the following licensing terms.
+-Redistribution and use in source and binary forms, with or without modification,
+-are permitted provided that the following conditions are met:
+-
+-    *   Redistributions of source code must retain the above copyright notice,
+-	this list of conditions and the following disclaimer.
+-
+-    *   Redistributions in binary form must reproduce the above copyright
+-	notice, this list of conditions and the following disclaimer in the
+-	documentation and/or other materials provided with the distribution.
+-
+-    *   Neither the name of Marvell nor the names of its contributors may be
+-	used to endorse or promote products derived from this software without
+-	specific prior written permission.
+-
+-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+-ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-
+-*******************************************************************************/
+-
+-/*******************************************************************************
+-* mvXor.h - Header File for :
+-*
+-* DESCRIPTION:
+-*       This file contains Marvell Controller XOR HW library API.
+-*       NOTE: This HW library API assumes XOR source, destination and
+-*       descriptors are cache coherent.
+-*
+-* DEPENDENCIES:
+-*       None.
+-*
+-*******************************************************************************/
+-
+-#ifndef __INCMVxorh
+-#define __INCMVxorh
+-
+-#define SRAM_BASE       	0x40000000
+-
+-#include "gtGenTypes.h"
+-#include "mv_os.h"
+-#include "printf.h"
+-#include "ddr3_hws_hw_training_def.h"
+-
+-#define MV_XOR_MAX_UNIT					2 /* XOR unit == XOR engine */
+-#define MV_XOR_MAX_CHAN         		4 /* total channels for all units together*/
+-#define MV_XOR_MAX_CHAN_PER_UNIT		2 /* channels for units */
+-
+-#define MV_IS_POWER_OF_2(num) ((num != 0) && ((num & (num - 1)) == 0))
+-
+-/* typedefs */
+-/* This structure describes address space window. Window base can be        */
+-/* 64 bit, window size up to 4GB                                            */
+-typedef struct _mvAddrWin {
+-	GT_U32 baseLow;		/* 32bit base low       */
+-	GT_U32 baseHigh;	/* 32bit base high      */
+-	GT_U32 size;		/* 32bit size           */
+-} MV_ADDR_WIN;
+-
+-
+-/* This structure describes SoC units address decode window	*/
+-typedef struct {
+-	MV_ADDR_WIN addrWin;	/* An address window */
+-	GT_BOOL enable;		/* Address decode window is enabled/disabled    */
+-	GT_U8 attrib;		/* chip select attributes */
+-	GT_U8 targetId;		/* Target Id of this MV_TARGET */
+-} MV_UNIT_WIN_INFO;
+-
+-
+-/* This enumerator describes the type of functionality the XOR channel      */
+-/* can have while using the same data structures.                           */
+-	typedef enum _mvXorType {
+-		MV_XOR,		/* XOR channel functions as XOR accelerator     */
+-		MV_DMA,		/* XOR channel functions as IDMA channel        */
+-		MV_CRC32	/* XOR channel functions as CRC 32 calculator   */
+-	} MV_XOR_TYPE;
+-
+-	
+-	/* This enumerator describes the set of commands that can be applied on   	*/
+-	/* an engine (e.g. IDMA, XOR). Appling a comman depends on the current   	*/
+-	/* status (see MV_STATE enumerator)                      					*/
+-	/* Start can be applied only when status is IDLE                         */
+-	/* Stop can be applied only when status is IDLE, ACTIVE or PAUSED        */
+-	/* Pause can be applied only when status is ACTIVE                          */
+-	/* Restart can be applied only when status is PAUSED                        */
+-	typedef enum _mvCommand {
+-		MV_START,		/* Start     */
+-		MV_STOP,		/* Stop     */
+-	  	MV_PAUSE,		/* Pause    */
+-	  	MV_RESTART		/* Restart  */
+-	} MV_COMMAND;
+-	
+-	
+-	/* This enumerator describes the set of state conditions.					*/
+-	/* Moving from one state to other is stricted.   							*/
+-	typedef enum _mvState {
+-		MV_IDLE,
+-  		MV_ACTIVE,
+-  		MV_PAUSED,
+-  		MV_UNDEFINED_STATE
+-	} MV_STATE;
+-
+-	/* Controller peripherals are designated memory/IO address spaces that the  */
+-	/* controller can access. They are also refered as "targets"                */
+-	typedef enum _mvTarget {
+-		TBL_TERM = -1, 	/* none valid target, used as targets list terminator*/
+-  		SRAM,
+-		SDRAM_CS0,	/*0 SDRAM chip select 0		*/
+-/*		SDRAM_CS1, */ /*1 SDRAM chip select 1		*/ 
+-/*		SDRAM_CS2, */ /*2 SDRAM chip select 2		*/ 
+-/*		SDRAM_CS3, */ /*3 SDRAM chip select 3		*/ 
+-  		MAX_TARGETS
+-	} MV_TARGET;
+-
+-#if defined(MV_CPU_LE)
+-	/* This structure describes XOR descriptor size 64bytes                     */
+-	typedef struct _mvXorDesc {
+-		GT_U32 status;	/* Successful descriptor execution indication */
+-		GT_U32 crc32Result;	/* Result of CRC-32 calculation */
+-		GT_U32 descCommand;	/* type of operation to be carried out on the data */
+-		GT_U32 phyNextDescPtr;	/* Next descriptor address pointer */
+-		GT_U32 byteCnt;	/* Size of source and destination blocks in bytes */
+-		GT_U32 phyDestAdd;	/* Destination Block address pointer */
+-		GT_U32 srcAdd0;	/* source block #0 address pointer */
+-		GT_U32 srcAdd1;	/* source block #1 address pointer */
+-		GT_U32 srcAdd2;	/* source block #2 address pointer */
+-		GT_U32 srcAdd3;	/* source block #3 address pointer */
+-		GT_U32 srcAdd4;	/* source block #4 address pointer */
+-		GT_U32 srcAdd5;	/* source block #6 address pointer */
+-		GT_U32 srcAdd6;	/* source block #6 address pointer */
+-		GT_U32 srcAdd7;	/* source block #7 address pointer */
+-		GT_U32 reserved0;
+-		GT_U32 reserved1;
+-	} MV_XOR_DESC;
+-
+-/* XOR descriptor structure for CRC and DMA descriptor */
+-	typedef struct _mvCrcDmaDesc {
+-		GT_U32 status;	/* Successful descriptor execution indication */
+-		GT_U32 crc32Result;	/* Result of CRC-32 calculation */
+-		GT_U32 descCommand;	/* type of operation to be carried out on the data */
+-		GT_U32 nextDescPtr;	/* Next descriptor address pointer */
+-		GT_U32 byteCnt;	/* Size of source block part represented by the descriptor */
+-		GT_U32 destAdd;	/* Destination Block address pointer (not used in CRC32 */
+-		GT_U32 srcAdd0;	/* Mode: Source Block address pointer */
+-		GT_U32 srcAdd1;	/* Mode: Source Block address pointer */
+-	} MV_CRC_DMA_DESC;
+-
+-#elif defined(MV_CPU_BE)
+-/* This structure describes XOR descriptor size 64bytes                     */
+-	typedef struct _mvXorDesc {
+-		GT_U32 crc32Result;	/* Result of CRC-32 calculation */
+-		GT_U32 status;	/* Successful descriptor execution indication */
+-		GT_U32 phyNextDescPtr;	/* Next descriptor address pointer */
+-		GT_U32 descCommand;	/* type of operation to be carried out on the data */
+-		GT_U32 phyDestAdd;	/* Destination Block address pointer */
+-		GT_U32 byteCnt;	/* Size of source and destination blocks in bytes */
+-		GT_U32 srcAdd1;	/* source block #1 address pointer */
+-		GT_U32 srcAdd0;	/* source block #0 address pointer */
+-		GT_U32 srcAdd3;	/* source block #3 address pointer */
+-		GT_U32 srcAdd2;	/* source block #2 address pointer */
+-		GT_U32 srcAdd5;	/* source block #5 address pointer */
+-		GT_U32 srcAdd4;	/* source block #4 address pointer */
+-		GT_U32 srcAdd7;	/* source block #7 address pointer */
+-		GT_U32 srcAdd6;	/* source block #6 address pointer */
+-		GT_U32 reserved0;
+-		GT_U32 reserved1;
+-	} MV_XOR_DESC;
+-
+-/* XOR descriptor structure for CRC and DMA descriptor */
+-	typedef struct _mvCrcDmaDesc {
+-		GT_U32 crc32Result;	/* Result of CRC-32 calculation */
+-		GT_U32 status;	/* Successful descriptor execution indication */
+-		GT_U32 nextDescPtr;	/* Next descriptor address pointer */
+-		GT_U32 descCommand;	/* type of operation to be carried out on the data */
+-		GT_U32 destAdd;	/* Destination Block address pointer (not used in CRC32 */
+-		GT_U32 byteCnt;	/* Size of source block part represented by the descriptor */
+-		GT_U32 srcAdd1;	/* Mode: Source Block address pointer */
+-		GT_U32 srcAdd0;	/* Mode: Source Block address pointer */
+-	} MV_CRC_DMA_DESC;
+-
+-#endif
+-
+-	typedef struct _mvXorEcc {
+-		GT_U32 destPtr;	/* Target block pointer to ECC/MemInit operation */
+-		GT_U32 blockSize;	/* Block size in bytes for ECC/MemInit operation */
+-		GT_BOOL periodicEnable;	/* Enable Timer Mode                                                         */
+-		GT_U32 tClkTicks;	/* ECC timer mode initial count - down value     */
+-		GT_U32 sectorSize;	/* section size for ECC timer mode operation     */
+-	} MV_XOR_ECC;
+-
+-	typedef enum _mvXorOverrideTarget {
+-		SRC_ADDR0,	/* Source Address #0 Control */
+-		SRC_ADDR1,	/* Source Address #1 Control */
+-		SRC_ADDR2,	/* Source Address #2 Control */
+-		SRC_ADDR3,	/* Source Address #3 Control */
+-		SRC_ADDR4,	/* Source Address #4 Control */
+-		SRC_ADDR5,	/* Source Address #5 Control */
+-		SRC_ADDR6,	/* Source Address #6 Control */
+-		SRC_ADDR7,	/* Source Address #7 Control */
+-		XOR_DST_ADDR,	/* Destination Address Control */
+-		XOR_NEXT_DESC	/* Next Descriptor Address Control */
+-	} MV_XOR_OVERRIDE_TARGET;
+-
+-	GT_VOID mvSysXorInit(GT_U32 uiNumOfCS, GT_U32 uiCsEna, GT_U32 csSize, GT_U32 baseDelta);
+-	GT_VOID mvSysXorFinish(void);
+-	GT_VOID mvXorHalInit(GT_U32 xorChanNum);
+-	GT_STATUS mvXorCtrlSet(GT_U32 chan, GT_U32 xorCtrl);
+-	GT_STATUS mvXorEccClean(GT_U32 chan, MV_XOR_ECC *pXorEccConfig);
+-	GT_U32 mvXorEccCurrTimerGet(GT_U32 chan, GT_U32 tClk);
+-	GT_STATUS mvXorMemInit(GT_U32 chan, GT_U32 startPtr, GT_U32 blockSize, GT_U32 initValHigh, GT_U32 initValLow);
+-	GT_STATUS mvXorTransfer(GT_U32 chan, MV_XOR_TYPE xorType, GT_U32 xorChainPtr);
+-	MV_STATE mvXorStateGet(GT_U32 chan);
+-	GT_STATUS mvXorCommandSet(GT_U32 chan, MV_COMMAND command);
+-	GT_STATUS mvXorOverrideSet(GT_U32 chan, MV_XOR_OVERRIDE_TARGET target, GT_U32 winNum, GT_BOOL enable);
+-
+-	GT_STATUS mvXorWinInit(MV_UNIT_WIN_INFO *addrWinMap);
+-	GT_STATUS mvXorTargetWinWrite(GT_U32 unit, GT_U32 winNum,MV_UNIT_WIN_INFO *pAddrDecWin);
+-	GT_STATUS mvXorTargetWinRead(GT_U32 unit, GT_U32 winNum,MV_UNIT_WIN_INFO *pAddrDecWin);
+-	GT_STATUS mvXorTargetWinEnable(GT_U32 unit, GT_U32 winNum, GT_BOOL enable);
+-	GT_STATUS mvXorProtWinSet(GT_U32 unit, GT_U32 chan, GT_U32 winNum, GT_BOOL access, GT_BOOL write);
+-	GT_STATUS mvXorPciRemap(GT_U32 unit, GT_U32 winNum, GT_U32 addrHigh);
+-
+-	
+-#endif
+diff --git a/tools/marvell/bin_hdr/inc/common/gtOs/mvXorRegs.h b/tools/marvell/bin_hdr/inc/common/gtOs/mvXorRegs.h
+deleted file mode 100644
+index 2f3dbe7..0000000
+--- a/tools/marvell/bin_hdr/inc/common/gtOs/mvXorRegs.h
++++ /dev/null
+@@ -1,280 +0,0 @@
+-/*******************************************************************************
+-Copyright (C) Marvell International Ltd. and its affiliates
+-This software file (the "File") is owned and distributed by Marvell
+-International Ltd. and/or its affiliates ("Marvell") under the following
+-alternative licensing terms.  Once you have made an election to distribute the
+-File under one of the following license alternatives, please (i) delete this
+-introductory statement regarding license alternatives, (ii) delete the two
+-license alternatives that you have not elected to use and (iii) preserve the
+-Marvell copyright notice above.
+-
+-********************************************************************************
+-Marvell Commercial License Option
+-
+-If you received this File from Marvell and you have entered into a commercial
+-license agreement (a "Commercial License") with Marvell, the File is licensed
+-to you under the terms of the applicable Commercial License.
+-
+-********************************************************************************
+-Marvell GPL License Option
+-If you received this File from Marvell, you may opt to use, redistribute and/or
+-modify this File in accordance with the terms and conditions of the General
+-Public License Version 2, June 1991 (the "GPL License"), a copy of which is
+-available along with the File in the license.txt file or by writing to the Free
+-Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 or
+-on the worldwide web at http://www.gnu.org/licenses/gpl.txt.
+-
+-THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE IMPLIED
+-WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE ARE EXPRESSLY
+-DISCLAIMED.  The GPL License provides additional details about this warranty
+-disclaimer.
+-********************************************************************************
+-Marvell BSD License Option
+-If you received this File from Marvell, you may opt to use, redistribute and/or
+-modify this File under the following licensing terms.
+-Redistribution and use in source and binary forms, with or without modification,
+-are permitted provided that the following conditions are met:
+-
+-    *   Redistributions of source code must retain the above copyright notice,
+-	this list of conditions and the following disclaimer.
+-
+-    *   Redistributions in binary form must reproduce the above copyright
+-	notice, this list of conditions and the following disclaimer in the
+-	documentation and/or other materials provided with the distribution.
+-
+-    *   Neither the name of Marvell nor the names of its contributors may be
+-	used to endorse or promote products derived from this software without
+-	specific prior written permission.
+-
+-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+-ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-*******************************************************************************/
+-
+-#ifndef __INCmvXorSpech
+-#define __INCmvXorSpech
+-
+-/* defines */
+-
+-/* for controllers that have two XOR units, then chans 2 & 3 will be mapped*/
+-/* to channels 0 & 1 of unit 1 */
+-#define XOR_UNIT(chan)	((chan) >> 1)
+-#define XOR_CHAN(chan)  ((chan) & 1)
+-
+-#ifdef CONFIG_ALLEYCAT3
+-#define MV_XOR_REGS_OFFSET(unit)		(0xf0800)
+-#else
+-#define MV_XOR_REGS_OFFSET(unit)		(0x60900)
+-#endif
+-#define MV_XOR_REGS_BASE(unit)		(MV_XOR_REGS_OFFSET(unit))
+-
+-/* XOR Engine Control Register Map */
+-#define XOR_CHANNEL_ARBITER_REG(unit)       (MV_XOR_REGS_BASE(unit))
+-#define XOR_CONFIG_REG(unit, chan)           (MV_XOR_REGS_BASE(unit)+(0x10 + ((chan) * 4)))
+-#define XOR_ACTIVATION_REG(unit, chan)       (MV_XOR_REGS_BASE(unit)+(0x20 + ((chan) * 4)))
+-
+-/* XOR Engine Interrupt Register Map */
+-#define XOR_CAUSE_REG(unit)         (MV_XOR_REGS_BASE(unit)+(0x30))
+-#define XOR_MASK_REG(unit)   	    (MV_XOR_REGS_BASE(unit)+(0x40))
+-#define XOR_ERROR_CAUSE_REG(unit)   (MV_XOR_REGS_BASE(unit)+(0x50))
+-#define XOR_ERROR_ADDR_REG(unit)    (MV_XOR_REGS_BASE(unit)+(0x60))
+-
+-/* XOR Engine Descriptor Register Map */
+-#define XOR_NEXT_DESC_PTR_REG(unit, chan) (MV_XOR_REGS_BASE(unit)+(0x200 + ((chan) * 4)))
+-#define XOR_CURR_DESC_PTR_REG(unit, chan) (MV_XOR_REGS_BASE(unit)+(0x210 + ((chan) * 4)))
+-#define XOR_BYTE_COUNT_REG(unit, chan)    (MV_XOR_REGS_BASE(unit)+(0x220 + ((chan) * 4)))
+-
+-/* XOR Engine ECC/MemInit Register Map */
+-#define XOR_DST_PTR_REG(unit, chan)          (MV_XOR_REGS_BASE(unit)+(0x2B0 + ((chan) * 4)))
+-#define XOR_BLOCK_SIZE_REG(unit, chan)       (MV_XOR_REGS_BASE(unit)+(0x2C0 + ((chan) * 4)))
+-#define XOR_TIMER_MODE_CTRL_REG(unit)       (MV_XOR_REGS_BASE(unit)+(0x2D0))
+-#define XOR_TIMER_MODE_INIT_VAL_REG(unit)   (MV_XOR_REGS_BASE(unit)+(0x2D4))
+-#define XOR_TIMER_MODE_CURR_VAL_REG(unit)   (MV_XOR_REGS_BASE(unit)+(0x2D8))
+-#define XOR_INIT_VAL_LOW_REG(unit)          (MV_XOR_REGS_BASE(unit)+(0x2E0))
+-#define XOR_INIT_VAL_HIGH_REG(unit)         (MV_XOR_REGS_BASE(unit)+(0x2E4))
+-
+-/* XOR Engine Debug Register Map */
+-#define XOR_DEBUG_REG(unit)                 (MV_XOR_REGS_BASE(unit)+(0x70))
+-
+-
+-/* XOR register fileds */
+-
+-
+-/* XOR Engine Channel Arbiter Register */
+-#define XECAR_SLICE_OFFS(sliceNum)          (sliceNum)
+-#define XECAR_SLICE_MASK(sliceNum)          (1 << (XECAR_SLICE_OFFS(sliceNum)))
+-
+-/* XOR Engine [0..1] Configuration Registers (XExCR) */
+-#define XEXCR_OPERATION_MODE_OFFS           (0)
+-#define XEXCR_OPERATION_MODE_MASK           (7 << XEXCR_OPERATION_MODE_OFFS)
+-#define XEXCR_OPERATION_MODE_XOR            (0 << XEXCR_OPERATION_MODE_OFFS)
+-#define XEXCR_OPERATION_MODE_CRC            (1 << XEXCR_OPERATION_MODE_OFFS)
+-#define XEXCR_OPERATION_MODE_DMA            (2 << XEXCR_OPERATION_MODE_OFFS)
+-#define XEXCR_OPERATION_MODE_ECC            (3 << XEXCR_OPERATION_MODE_OFFS)
+-#define XEXCR_OPERATION_MODE_MEM_INIT       (4 << XEXCR_OPERATION_MODE_OFFS)
+-
+-#define XEXCR_SRC_BURST_LIMIT_OFFS          (4)
+-#define XEXCR_SRC_BURST_LIMIT_MASK          (7 << XEXCR_SRC_BURST_LIMIT_OFFS)
+-#define XEXCR_DST_BURST_LIMIT_OFFS          (8)
+-#define XEXCR_DST_BURST_LIMIT_MASK          (7 << XEXCR_DST_BURST_LIMIT_OFFS)
+-#define XEXCR_DRD_RES_SWP_OFFS              (12)
+-#define XEXCR_DRD_RES_SWP_MASK              (1 << XEXCR_DRD_RES_SWP_OFFS)
+-#define XEXCR_DWR_REQ_SWP_OFFS              (13)
+-#define XEXCR_DWR_REQ_SWP_MASK              (1 << XEXCR_DWR_REQ_SWP_OFFS)
+-#define XEXCR_DES_SWP_OFFS                  (14)
+-#define XEXCR_DES_SWP_MASK                  (1 << XEXCR_DES_SWP_OFFS)
+-#define XEXCR_REG_ACC_PROTECT_OFFS          (15)
+-#define XEXCR_REG_ACC_PROTECT_MASK          (1 << XEXCR_REG_ACC_PROTECT_OFFS)
+-
+-
+-/* XOR Engine [0..1] Activation Registers (XExACTR) */
+-#define XEXACTR_XESTART_OFFS                (0)
+-#define XEXACTR_XESTART_MASK                (1 << XEXACTR_XESTART_OFFS)
+-#define XEXACTR_XESTOP_OFFS                 (1)
+-#define XEXACTR_XESTOP_MASK                 (1 << XEXACTR_XESTOP_OFFS)
+-#define XEXACTR_XEPAUSE_OFFS                (2)
+-#define XEXACTR_XEPAUSE_MASK                (1 << XEXACTR_XEPAUSE_OFFS)
+-#define XEXACTR_XERESTART_OFFS              (3)
+-#define XEXACTR_XERESTART_MASK              (1 << XEXACTR_XERESTART_OFFS)
+-#define XEXACTR_XESTATUS_OFFS               (4)
+-#define XEXACTR_XESTATUS_MASK               (3 << XEXACTR_XESTATUS_OFFS)
+-#define XEXACTR_XESTATUS_IDLE               (0 << XEXACTR_XESTATUS_OFFS)
+-#define XEXACTR_XESTATUS_ACTIVE             (1 << XEXACTR_XESTATUS_OFFS)
+-#define XEXACTR_XESTATUS_PAUSED             (2 << XEXACTR_XESTATUS_OFFS)
+-
+-/* XOR Engine Interrupt Cause Register (XEICR) */
+-#define XEICR_CHAN_OFFS					16
+-#define XEICR_CAUSE_OFFS(chan)   		(chan * XEICR_CHAN_OFFS)
+-#define XEICR_CAUSE_MASK(chan, cause)   (1 << (cause + XEICR_CAUSE_OFFS(chan)))
+-#define XEICR_COMP_MASK_ALL				0x000f000f
+-#define XEICR_COMP_MASK(chan)			(0x000f << XEICR_CAUSE_OFFS(chan))
+-#define XEICR_ERR_MASK					0x03800380
+-
+-/* XOR Engine Error Cause Register (XEECR) */
+-#define XEECR_ERR_TYPE_OFFS				0
+-#define XEECR_ERR_TYPE_MASK				(0x1f << XEECR_ERR_TYPE_OFFS)
+-
+-/* XOR Engine Error Address Register (XEEAR) */
+-#define XEEAR_ERR_ADDR_OFFS                 (0)
+-#define XEEAR_ERR_ADDR_MASK                 (0xFFFFFFFF << XEEAR_ERR_ADDR_OFFS)
+-
+-/* XOR Engine [0..1] Next Descriptor Pointer Register (XExNDPR) */
+-#define XEXNDPR_NEXT_DESC_PTR_OFFS          (0)
+-#define XEXNDPR_NEXT_DESC_PTR_MASK          (0xFFFFFFFF << XEXNDPR_NEXT_DESC_PTR_OFFS)
+-
+-/* XOR Engine [0..1] Current Descriptor Pointer Register (XExCDPR) */
+-#define XEXCDPR_CURRENT_DESC_PTR_OFFS       (0)
+-#define XEXCDPR_CURRENT_DESC_PTR_MASK       (0xFFFFFFFF << XEXCDPR_CURRENT_DESC_PTR_OFFS)
+-
+-/* XOR Engine [0..1] Byte Count Register (XExBCR) */
+-#define XEXBCR_BYTE_CNT_OFFS                (0)
+-#define XEXBCR_BYTE_CNT_MASK                (0xFFFFFFFF << XEXBCR_BYTE_CNT_OFFS)
+-
+-/* XOR Engine [0..1] Destination Pointer Register (XExDPR0) */
+-#define XEXDPR_DST_PTR_OFFS                 (0)
+-#define XEXDPR_DST_PTR_MASK                 (0xFFFFFFFF << XEXDPR_DST_PTR_OFFS)
+-#define XEXDPR_DST_PTR_XOR_MASK             (0x3F)
+-#define XEXDPR_DST_PTR_DMA_MASK             (0x1F)
+-#define XEXDPR_DST_PTR_CRC_MASK             (0x1F)
+-
+-/* XOR Engine[0..1] Block Size Registers (XExBSR) */
+-#define XEXBSR_BLOCK_SIZE_OFFS              (0)
+-#define XEXBSR_BLOCK_SIZE_MASK              (0xFFFFFFFF << XEXBSR_BLOCK_SIZE_OFFS)
+-#define XEXBSR_BLOCK_SIZE_MIN_VALUE         (128)
+-#define XEXBSR_BLOCK_SIZE_MAX_VALUE         (0xFFFFFFFF)
+-
+-/* XOR Engine Timer Mode Control Register (XETMCR) */
+-#define XETMCR_TIMER_EN_OFFS                (0)
+-#define XETMCR_TIMER_EN_MASK                (1 << XETMCR_TIMER_EN_OFFS)
+-#define XETMCR_TIMER_EN_ENABLE              (1 << XETMCR_TIMER_EN_OFFS)
+-#define XETMCR_TIMER_EN_DISABLE             (0 << XETMCR_TIMER_EN_OFFS)
+-#define XETMCR_SECTION_SIZE_CTRL_OFFS       (8)
+-#define XETMCR_SECTION_SIZE_CTRL_MASK       (0x1F << XETMCR_SECTION_SIZE_CTRL_OFFS)
+-#define XETMCR_SECTION_SIZE_MIN_VALUE       (7)
+-#define XETMCR_SECTION_SIZE_MAX_VALUE       (31)
+-
+-/* XOR Engine Timer Mode Initial Value Register (XETMIVR) */
+-#define XETMIVR_TIMER_INIT_VAL_OFFS         (0)
+-#define XETMIVR_TIMER_INIT_VAL_MASK         (0xFFFFFFFF << XETMIVR_TIMER_INIT_VAL_OFFS)
+-
+-/* XOR Engine Timer Mode Current Value Register (XETMCVR) */
+-#define XETMCVR_TIMER_CRNT_VAL_OFFS         (0)
+-#define XETMCVR_TIMER_CRNT_VAL_MASK         (0xFFFFFFFF << XETMCVR_TIMER_CRNT_VAL_OFFS)
+-
+-/* XOR Engine Initial Value Register Low (XEIVRL) */
+-#define XEIVRL_INIT_VAL_L_OFFS              (0)
+-#define XEIVRL_INIT_VAL_L_MASK              (0xFFFFFFFF << XEIVRL_INIT_VAL_L_OFFS)
+-
+-/* XOR Engine Initial Value Register High (XEIVRH) */
+-#define XEIVRH_INIT_VAL_H_OFFS              (0)
+-#define XEIVRH_INIT_VAL_H_MASK              (0xFFFFFFFF << XEIVRH_INIT_VAL_H_OFFS)
+-
+-/* XOR Engine Debug Register (XEDBR) */
+-#define XEDBR_PARITY_ERR_INSR_OFFS          (0)
+-#define XEDBR_PARITY_ERR_INSR_MASK          (1 << XEDBR_PARITY_ERR_INSR_OFFS)
+-#define XEDBR_XBAR_ERR_INSR_OFFS            (1)
+-#define XEDBR_XBAR_ERR_INSR_MASK            (1 << XEDBR_XBAR_ERR_INSR_OFFS)
+-
+-
+-/* XOR Engine address decode registers.	*/
+-
+-#define XOR_MAX_ADDR_DEC_WIN	8	/* Maximum address decode windows		*/
+-#define XOR_MAX_REMAP_WIN       4	/* Maximum address arbiter windows		*/
+-
+-/* XOR Engine Address Decoding Register Map */
+-#define XOR_WINDOW_CTRL_REG(unit, chan)     (MV_XOR_REGS_BASE(unit)+(0x240 + ((chan) * 4)))
+-#define XOR_BASE_ADDR_REG(unit, winNum)     (MV_XOR_REGS_BASE(unit)+(0x250 + ((winNum) * 4)))
+-#define XOR_SIZE_MASK_REG(unit, winNum)     (MV_XOR_REGS_BASE(unit)+(0x270 + ((winNum) * 4)))
+-#define XOR_HIGH_ADDR_REMAP_REG(unit, winNum) (MV_XOR_REGS_BASE(unit)+(0x290 + ((winNum) * 4)))
+-#define XOR_ADDR_OVRD_REG(unit, winNum) 	(MV_XOR_REGS_BASE(unit)+(0x2A0 + ((winNum) * 4)))
+-
+-/* XOR Engine [0..1] Window Control Registers (XExWCR) */
+-#define XEXWCR_WIN_EN_OFFS(winNum)          (winNum)
+-#define XEXWCR_WIN_EN_MASK(winNum)          (1 << (XEXWCR_WIN_EN_OFFS(winNum)))
+-#define XEXWCR_WIN_EN_ENABLE(winNum)        (1 << (XEXWCR_WIN_EN_OFFS(winNum)))
+-#define XEXWCR_WIN_EN_DISABLE(winNum)       (0 << (XEXWCR_WIN_EN_OFFS(winNum)))
+-
+-#define XEXWCR_WIN_ACC_OFFS(winNum)         ((2 * winNum) + 16)
+-#define XEXWCR_WIN_ACC_MASK(winNum)         (3 << (XEXWCR_WIN_ACC_OFFS(winNum)))
+-#define XEXWCR_WIN_ACC_NO_ACC(winNum)       (0 << (XEXWCR_WIN_ACC_OFFS(winNum)))
+-#define XEXWCR_WIN_ACC_RO(winNum)           (1 << (XEXWCR_WIN_ACC_OFFS(winNum)))
+-#define XEXWCR_WIN_ACC_RW(winNum)           (3 << (XEXWCR_WIN_ACC_OFFS(winNum)))
+-
+-/* XOR Engine Base Address Registers (XEBARx) */
+-#define XEBARX_TARGET_OFFS                  (0)
+-#define XEBARX_TARGET_MASK                  (0xF << XEBARX_TARGET_OFFS)
+-#define XEBARX_ATTR_OFFS                    (8)
+-#define XEBARX_ATTR_MASK                    (0xFF << XEBARX_ATTR_OFFS)
+-#define XEBARX_BASE_OFFS                    (16)
+-#define XEBARX_BASE_MASK                    (0xFFFF << XEBARX_BASE_OFFS)
+-
+-
+-/* XOR Engine Size Mask Registers (XESMRx) */
+-#define XESMRX_SIZE_MASK_OFFS               (16)
+-#define XESMRX_SIZE_MASK_MASK               (0xFFFF << XESMRX_SIZE_MASK_OFFS)
+-#define XOR_WIN_SIZE_ALIGN		    _64K
+-
+-/* XOR Engine High Address Remap Register (XEHARRx1) */
+-#define XEHARRX_REMAP_OFFS                  (0)
+-#define XEHARRX_REMAP_MASK                  (0xFFFFFFFF << XEHARRX_REMAP_OFFS)
+-
+-
+-#define XOR_OVERRIDE_CTRL_REG(chan)   (MV_XOR_REGS_BASE(XOR_UNIT(chan))+(0x2A0 + ((XOR_CHAN(chan)) * 4)))
+-/* XOR Engine [0..1] Address Override Control Register (XExAOCR) */
+-#define XEXAOCR_OVR_EN_OFFS(target)         (3 * target)
+-#define XEXAOCR_OVR_EN_MASK(target)         (1 << (XEXAOCR_OVR_EN_OFFS(target)))
+-#define XEXAOCR_OVR_PTR_OFFS(target)        ((3 * target) + 1)
+-#define XEXAOCR_OVR_PTR_MASK(target)        (3 << (XEXAOCR_OVR_PTR_OFFS(target)))
+-#define XEXAOCR_OVR_BAR(winNum, target)      (winNum << (XEXAOCR_OVR_PTR_OFFS(target)))
+-
+-#define XOR_MAX_OVERRIDE_WIN	4	/* Maximum address override windows		*/
+-
+-
+-#endif	/* __INCmvXorSpech */
+diff --git a/tools/marvell/bin_hdr/platform/Makefile b/tools/marvell/bin_hdr/platform/Makefile
+index c196bef..250e385 100755
+--- a/tools/marvell/bin_hdr/platform/Makefile
++++ b/tools/marvell/bin_hdr/platform/Makefile
+@@ -80,7 +80,7 @@ BIN_HDR_DEBUG = $(UTILS)/debug
+ CSRC_DRV = $(DRV)/mv_uart.c $(DRV)/mv_twsi.c $(DRV)/mv_time.c
+ CSRC_UTILS = $(UTILS)/utils.c $(UTILS)/printf.c $(UTILS)/mvHwsSiliconIf.c
+ CSRC_SYS_ENV = $(SYS_ENV)/mvSysEnvLib.c
+-CSRC_BIN_HDR_DEBUG = $(BIN_HDR_DEBUG)/debug.c $(BIN_HDR_DEBUG)/lib_utils.c $(BIN_HDR_DEBUG)/command.c $(BIN_HDR_DEBUG)/mem.c $(BIN_HDR_DEBUG)/xor_memtest.c
++CSRC_BIN_HDR_DEBUG = $(BIN_HDR_DEBUG)/debug.c $(BIN_HDR_DEBUG)/lib_utils.c $(BIN_HDR_DEBUG)/command.c $(BIN_HDR_DEBUG)/mem.c
+ 
+ ifeq "$(CONFIG_ALLEYCAT3)"  "y"
+   CSRC_UTILS += $(UTILS)/mv_seq_exec_ext.c
+diff --git a/tools/marvell/bin_hdr/platform/utils/debug/command.c b/tools/marvell/bin_hdr/platform/utils/debug/command.c
+index bf13f4a..a253aaf 100644
+--- a/tools/marvell/bin_hdr/platform/utils/debug/command.c
++++ b/tools/marvell/bin_hdr/platform/utils/debug/command.c
+@@ -77,7 +77,6 @@ int do_mem_cp(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
+ int ir_cmd(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
+ int training_cmd(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
+ int do_mem_mtest(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
+-int do_xorMemTest(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[]);
+ 
+ /* Commands Table
+  * Every new command is added here, Thus it must be declared in
+@@ -95,9 +94,7 @@ cmd_tbl_t commands[] = {
+ 	{ "cp", 4, do_mem_cp, "memory copy", "[.b, .w, .l] source target count"},
+ 	{ "ir", 2, ir_cmd, "ir	- reading and changing MV internal register values.\n", "address"},
+ 	{ "training", 1, training_cmd, "training	- prints the results of the DDR3 Training.\n"},
+-	{ "mtest", 5, do_mem_mtest, "simple RAM read/write test", "[start [end [pattern [iterations]]]]"},
+-	{ "xormtest", 4, do_xorMemTest, "run memory test based on XOR engine",
+-		"[source [destination [size(bytes) [iterations]]]]"}
++	{ "mtest", 5, do_mem_mtest, "simple RAM read/write test", "[start [end [pattern [iterations]]]]"}
+ };
+ 
+ /* local functions definitions */
+diff --git a/tools/marvell/bin_hdr/platform/utils/debug/xor_memtest.c b/tools/marvell/bin_hdr/platform/utils/debug/xor_memtest.c
+deleted file mode 100644
+index 43289c6..0000000
+--- a/tools/marvell/bin_hdr/platform/utils/debug/xor_memtest.c
++++ /dev/null
+@@ -1,314 +0,0 @@
+-/*******************************************************************************
+-Copyright (C) Marvell International Ltd. and its affiliates
+-
+-This software file (the "File") is owned and distributed by Marvell
+-International Ltd. and/or its affiliates ("Marvell") under the following
+-alternative licensing terms.  Once you have made an election to distribute the
+-File under one of the following license alternatives, please (i) delete this
+-introductory statement regarding license alternatives, (ii) delete the two
+-license alternatives that you have not elected to use and (iii) preserve the
+-Marvell copyright notice above.
+-
+-********************************************************************************
+-Marvell Commercial License Option
+-
+-If you received this File from Marvell and you have entered into a commercial
+-license agreement (a "Commercial License") with Marvell, the File is licensed
+-to you under the terms of the applicable Commercial License.
+-
+-********************************************************************************
+-Marvell GPL License Option
+-
+-If you received this File from Marvell, you may opt to use, redistribute and/or
+-modify this File in accordance with the terms and conditions of the General
+-Public License Version 2, June 1991 (the "GPL License"), a copy of which is
+-available along with the File in the license.txt file or by writing to the Free
+-Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 or
+-on the worldwide web at http://www.gnu.org/licenses/gpl.txt.
+-
+-THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE IMPLIED
+-WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE ARE EXPRESSLY
+-DISCLAIMED.  The GPL License provides additional details about this warranty
+-disclaimer.
+-********************************************************************************
+-Marvell BSD License Option
+-
+-If you received this File from Marvell, you may opt to use, redistribute and/or
+-modify this File under the following licensing terms.
+-Redistribution and use in source and binary forms, with or without modification,
+-are permitted provided that the following conditions are met:
+-
+-    *   Redistributions of source code must retain the above copyright notice,
+-	    this list of conditions and the following disclaimer.
+-
+-    *   Redistributions in binary form must reproduce the above copyright
+-		notice, this list of conditions and the following disclaimer in the
+-		documentation and/or other materials provided with the distribution.
+-
+-    *   Neither the name of Marvell nor the names of its contributors may be
+-		used to endorse or promote products derived from this software without
+-		specific prior written permission.
+-
+-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+-ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-
+-*******************************************************************************/
+-
+-#include "command.h"
+-#include "printf.h"
+-#include "mvUart.h"
+-#include "lib_utils.h"
+-#include "mv_os.h"
+-#include "soc_spec.h"
+-#include "ddr3_hws_hw_training_def.h"
+-#include "stdint.h"
+-#include "gtOs/mvXor.h"
+-#include "gtOs/mvXorRegs.h"
+-#include "stdlib.h"
+-#include "util.h"
+-#include "xor_memtest.h"
+-
+-extern GT_U32 mvHwsDdr3TipMaxCSGet(GT_U32 devNum);
+-
+-/*******************************************************************************
+-* fillKillerPattern
+-*
+-* DESCRIPTION:
+-* Writes the killer pattern in the specified source address in DRAM
+-*
+-* INPUT:
+-*	nBase		- base address to start writing to
+-*	nSize		- size of the block in bytes
+-*	nbusWidth	- bus width, must be multiply of 32
+-*
+-*******************************************************************************/
+-void fillKillerPattern(MV_U32 nBase, MV_U32 nSize, MV_U32 nbusWidth)
+-{
+-	MV_U8 killerPatternBusState[ST_KP_LEN] = KILLER_PATTERN_BUS_STATE;
+-	MV_U8 killerPatternBitState[ST_KP_LEN] = KILLER_PATTERN_BIT_STATE;
+-	MV_U32 nOffset = 0;
+-	MV_U32 nNumOfWord = nbusWidth / 32;
+-	MV_U32 nPattern;
+-	MV_U32 nIndex   = 0;
+-	MV_U32 nVicBit  = BIT0;
+-	MV_U32 nVicWord = 0;
+-	MV_U32 nWord;
+-
+-	while (nOffset < nSize) {
+-		if (nIndex == ST_KP_LEN) {
+-			nIndex = 0;
+-			nVicBit <<= 1;
+-			if (nVicBit == 0) {
+-				nVicBit = BIT0;
+-				nVicWord++;
+-				if (nVicWord == nNumOfWord)
+-					nVicWord = 0;
+-			}
+-		}
+-		for (nWord = 0; ((nWord < nNumOfWord) && (nOffset < nSize)); nWord++, nOffset += 0x4) {
+-			nPattern = BUS_STATUS(killerPatternBusState[nIndex]);
+-			if (nWord == nVicWord)
+-				nPattern = ((killerPatternBitState[nIndex]) ?
+-						(nPattern | nVicBit) : (nPattern & ~nVicBit));
+-
+-			MV_MEMIO_LE32_WRITE(nBase + nOffset, nPattern);
+-		}
+-		nIndex++;
+-	}
+-}
+-
+-/*******************************************************************************
+-* configureMemoryMapping
+-*
+-* DESCRIPTION:
+-* Opens memory windows in the XOR Engine to the DRAM and SRAM
+-*
+-*******************************************************************************/
+-void configureMemoryMapping()
+-{
+-	MV_U32 max_cs;
+-	MV_U32 uiCsEna = 0, cs_c;
+-#ifndef MV88F672X
+-	max_cs = mvHwsDdr3TipMaxCSGet(0);
+-#else
+-	max_cs = 2;
+-#endif
+-	for (cs_c = 0; cs_c < max_cs; cs_c++)
+-		uiCsEna |= 1 << cs_c;
+-
+-	/* enable SRAM window */
+-	uiCsEna |= 1 << SRAM_WIN_ID;
+-	max_cs++;
+-	/* configure XOR engine windows */
+-	mvSysXorInit(max_cs, uiCsEna, 0x80000000, 0);
+-
+-	/* shrink first DRAM(CS0) window to 0x40000000 (bytes)
+-	 * to avoid memory mapping conflict:
+-	 * First DRAM(CS0) window starts in 0x0 and ends in 0x80000000
+-	 * SRAM window starts in 0x40000000
+-	 * Hence, there is a conflict */
+-	MV_REG_WRITE(XOR_SIZE_MASK_REG(0, 0), 0x3FFF0000);
+-}
+-
+-/*******************************************************************************
+-* XORCalculateCRC
+-*
+-* DESCRIPTION:
+-* Calculates crc32c using the XOR engine
+-*
+-* INPUT:
+-*	nChannel	- channel number (0..3)
+-*	nSrcAddr	- source address
+-*	nByteCnt	- size of the block in bytes
+-*
+-* OUTPUT:
+-*	res		- crc32c result
+-*
+-* RETURN:
+-*	MV_ERROR, in case of any error in calculation
+-*	MV_OK, otherwise
+-*
+-*******************************************************************************/
+-MV_STATUS XORCalculateCRC(MV_U32 nChannel, MV_U32 nSrcAddr, MV_U32 nByteCnt, MV_U32 *res)
+-{
+-
+-	MV_U32 nTimeout = XOR_ENGINE_TIMEOUT;
+-	MV_XOR_DESC XorDesc;
+-	MV_XOR_DESC *pXorDesc = &XorDesc;
+-	MV_U32 nXorChannel = XOR_CHAN(nChannel);
+-
+-	/* align pointer address to be multiple of 32 */
+-	pXorDesc = (MV_XOR_DESC *)(((MV_U32)((void *)pXorDesc + 32)) & ~(32 - 1));
+-
+-	memset((void *)pXorDesc, 0, sizeof(MV_CRC_DMA_DESC));
+-
+-	/* clean previous indication from engine */
+-	MV_REG_WRITE(XOR_CAUSE_REG(XOR_UNIT(nChannel)), 0);
+-
+-	memset((void *)pXorDesc, 0, sizeof(MV_CRC_DMA_DESC));
+-	pXorDesc->srcAdd0		= nSrcAddr;
+-	pXorDesc->byteCnt		= nByteCnt;
+-	pXorDesc->descCommand		= BIT30;
+-	pXorDesc->phyNextDescPtr	= 0;
+-	pXorDesc->status		= BIT31;
+-	pXorDesc->crc32Result		= 0;
+-
+-	/* wait for previous transfer to finnish */
+-	while (mvXorStateGet(nChannel) != MV_IDLE)
+-		;
+-
+-	/* disable address override */
+-	MV_REG_WRITE(XOR_OVERRIDE_CTRL_REG(nChannel), 0x0);
+-
+-	if (mvXorTransfer(nChannel, MV_CRC32, (MV_U32)pXorDesc) != MV_OK) {
+-		mvPrintf("%s: Error during XOR CRC...!\n", __func__);
+-		return MV_ERROR;
+-	}
+-
+-	/* wait for the engine to finish */
+-	while ((MV_REG_READ(XOR_CAUSE_REG(XOR_UNIT(nChannel))) & ((BIT1|BIT0) << (16*nXorChannel))) == 0) {
+-		if (nTimeout-- == 0) {
+-			mvPrintf("%s: XOR CRC timeout!!\n", __func__);
+-			return MV_ERROR;
+-		}
+-	}
+-
+-	nTimeout = XOR_ENGINE_TIMEOUT;
+-	while (mvXorStateGet(nChannel) != MV_IDLE) {
+-		if (nTimeout-- == 0) {
+-			mvPrintf("%s: XOR CRC timeout 0!!\n", __func__);
+-			return MV_ERROR;
+-		}
+-	}
+-
+-	*res = pXorDesc->crc32Result;
+-	return MV_OK;
+-}
+-
+-/*******************************************************************************
+-* do_xorMemTest
+-*
+-* DESCRIPTION:
+-* The command run memory test that is based on the XOR engine
+-*
+-*******************************************************************************/
+-int do_xorMemTest(cmd_tbl_t *cmdtp, int flag, int argc, char * const argv[])
+-{
+-	MV_STATUS status;
+-	MV_U32 nBlockCRC, nOffsetInDest, nOffset, nCRC, i, nSourceAddr, nDestAddr;
+-	MV_U32 sourceBase = SOURCE_ADDRESS_BASE;
+-	MV_U32 destBase = DESTANTION_ADDRESS_BASE;
+-	MV_U32 destSize = DESTANTION_SIZE;
+-	MV_U32 iterations = 1;
+-
+-	if (argc > 1)
+-		nSourceAddr = simple_strtoul(argv[1], NULL, 16);
+-
+-	if (argc > 2)
+-		nDestAddr = simple_strtoul(argv[2], NULL, 16);
+-
+-	if (argc > 3)
+-		destSize = simple_strtoul(argv[3], NULL, 16);
+-
+-	if (argc > 4)
+-		iterations = simple_strtoul(argv[4], NULL, 16);
+-
+-	/* check destSize, must be multiply of 1MB */
+-	if (destSize & (_1M - 1)) {
+-		mvPrintf("Error: Destination size must be multiply of 0x%X(1MB)\n", _1M);
+-		mvSysXorFinish();
+-		return -1;
+-	}
+-
+-	configureMemoryMapping();
+-
+-	/* write the killer pattern in the source block */
+-	fillKillerPattern(sourceBase, BLOCK_SIZE, 64);
+-	fillKillerPattern(sourceBase + BLOCK_SIZE, BLOCK_SIZE, 128);
+-
+-	status = XORCalculateCRC(2, sourceBase, TOTAL_BLOCK_SIZE, &nBlockCRC);
+-	CHECK_CRC_STATUS(status);
+-	mvPrintf("nBlockCRC %x\n", nBlockCRC);
+-
+-	/* Start copying blocks */
+-	for (i = 0; i < iterations; i++) {
+-		for (nOffsetInDest = 0; nOffsetInDest < destSize; nOffsetInDest += TOTAL_BLOCK_SIZE) {
+-
+-			/* Copy block to the current destination address*/
+-			for (nOffset = 0; nOffset < TOTAL_BLOCK_SIZE; nOffset += CPU_BURST_SIZE) {
+-				nSourceAddr = sourceBase + nOffset;
+-				nDestAddr = destBase + nOffsetInDest + nOffset;
+-				MV_PLD_RANGE(nDestAddr, nDestAddr + CPU_BURST_SIZE);
+-				memcpy((void *)nDestAddr, (void *)nSourceAddr, CPU_BURST_SIZE);
+-				MV_FLUSH_CACHE_L1(nDestAddr, nDestAddr + CPU_BURST_SIZE);
+-			}
+-		}
+-
+-		/* Check the copied blocks in destination */
+-		for (nOffsetInDest = 0; nOffsetInDest < destSize; nOffsetInDest += TOTAL_BLOCK_SIZE) {
+-			nDestAddr = destBase + nOffsetInDest;
+-			status = XORCalculateCRC(2, nDestAddr, TOTAL_BLOCK_SIZE, &nCRC);
+-			CHECK_CRC_STATUS(status);
+-			if (nCRC != nBlockCRC) {
+-				mvPrintf("Error at Block start address %X\n", nDestAddr);
+-				mvPrintf("CRC was %X expected %X\n", nCRC, nBlockCRC);
+-				mvSysXorFinish();
+-				return -1;
+-			}
+-		}
+-		mvPrintf("\b\b\b\b%4d", i);
+-	}
+-	mvPrintf("\b\b\b\b");
+-	mvPrintf("MemTest end successfully\n");
+-	mvSysXorFinish();
+-
+-	return 0;
+-}
+diff --git a/tools/marvell/bin_hdr/platform/utils/debug/xor_memtest.h b/tools/marvell/bin_hdr/platform/utils/debug/xor_memtest.h
+deleted file mode 100644
+index 91d7ab7..0000000
+--- a/tools/marvell/bin_hdr/platform/utils/debug/xor_memtest.h
++++ /dev/null
+@@ -1,145 +0,0 @@
+-/*******************************************************************************
+-Copyright (C) Marvell International Ltd. and its affiliates
+-
+-This software file (the "File") is owned and distributed by Marvell
+-International Ltd. and/or its affiliates ("Marvell") under the following
+-alternative licensing terms.  Once you have made an election to distribute the
+-File under one of the following license alternatives, please (i) delete this
+-introductory statement regarding license alternatives, (ii) delete the two
+-license alternatives that you have not elected to use and (iii) preserve the
+-Marvell copyright notice above.
+-
+-********************************************************************************
+-Marvell Commercial License Option
+-
+-If you received this File from Marvell and you have entered into a commercial
+-license agreement (a "Commercial License") with Marvell, the File is licensed
+-to you under the terms of the applicable Commercial License.
+-
+-********************************************************************************
+-Marvell GPL License Option
+-
+-If you received this File from Marvell, you may opt to use, redistribute and/or
+-modify this File in accordance with the terms and conditions of the General
+-Public License Version 2, June 1991 (the "GPL License"), a copy of which is
+-available along with the File in the license.txt file or by writing to the Free
+-Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 or
+-on the worldwide web at http://www.gnu.org/licenses/gpl.txt.
+-
+-THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE IMPLIED
+-WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE ARE EXPRESSLY
+-DISCLAIMED.  The GPL License provides additional details about this warranty
+-disclaimer.
+-********************************************************************************
+-Marvell BSD License Option
+-
+-If you received this File from Marvell, you may opt to use, redistribute and/or
+-modify this File under the following licensing terms.
+-Redistribution and use in source and binary forms, with or without modification,
+-are permitted provided that the following conditions are met:
+-
+-    *   Redistributions of source code must retain the above copyright notice,
+-	    this list of conditions and the following disclaimer.
+-
+-    *   Redistributions in binary form must reproduce the above copyright
+-		notice, this list of conditions and the following disclaimer in the
+-		documentation and/or other materials provided with the distribution.
+-
+-    *   Neither the name of Marvell nor the names of its contributors may be
+-		used to endorse or promote products derived from this software without
+-		specific prior written permission.
+-
+-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+-ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+-WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+-ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+-(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+-LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+-ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+-SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+-
+-*******************************************************************************/
+-
+-#define SRAM_WIN_ID		0x4
+-#define SRAM_WIN_BASE		0x40000000
+-
+-#define XOR_ENGINE_TIMEOUT	0x5000000
+-
+-#define ST_KP_LEN		59
+-#define ONE			0xffffffff
+-#define ZERO			0
+-#define BUS_STATUS(nValue)	((nValue) ? ONE : ZERO)
+-#define BIT(X)			(0x1 << X)
+-
+-#define NUM_OF_DESC		8
+-#define DESC_SIZE		_8M
+-
+-#define SOURCE_ADDRESS_BASE    0x83000000
+-#define BLOCK_SIZE             _1M
+-#define TOTAL_BLOCK_SIZE       (BLOCK_SIZE*2)
+-#define KILLER_64BIT_BASE      SOURCE_ADDRESS_BASE
+-#define KILLER_128BIT_BASE     (KILLER_64BIT_BASE + BLOCK_SIZE)
+-#define CPU_BURST_SIZE         _1K
+-
+-#define DESTANTION_ADDRESS_BASE 0x84000000
+-#define DESTANTION_SIZE         _128M
+-
+-#define NUM_OF_XOR_ENGINE              4
+-#define XOR_BLOCK_SIZE                 (_16M - 1)
+-#define XOR_SOURCE_ADDRESS(nXorNum)    (0x10000000 + _128M*nXorNum)
+-#define XOR_DEST_ADDRESS(nXorNum)      (XOR_SOURCE_ADDRESS(nXorNum) + (DESC_SIZE*NUM_OF_DESC))
+-
+-#define MV_PLD(Address)\
+-{\
+-	__asm__ __volatile__("pld [%0]" : : "r" (Address));\
+-}
+-
+-#define MV_PLD_RANGE(from, to)\
+-{\
+-	MV_U32 addr;\
+-	for (addr = from; addr < to; addr += 32) {\
+-		MV_PLD(addr);\
+-	} \
+-}
+-
+-#define CHECK_CRC_STATUS(status)\
+-{\
+-	if (status != MV_OK) {\
+-		mvPrintf("Failed to calculate CRC32\n");\
+-		return 1;\
+-	} \
+-}
+-
+-void cache_inv(MV_U32 dest);
+-void flush_l1_v7(MV_U32 dest);
+-
+-#define MV_FLUSH_CACHE_L1(from, to)\
+-{\
+-	MV_U32 addr;\
+-	for (addr = from; addr < to; addr += 32) {\
+-		cache_inv(addr);\
+-		flush_l1_v7(addr);\
+-	} \
+-}
+-
+-#define KILLER_PATTERN_BUS_STATE\
+-	{\
+-		0, 0, 0, 1, 1, 1, 0, 1, 0, 1,\
+-		0, 0, 1, 0, 1, 0, 1, 0, 1, 0,\
+-		1, 0, 1, 0, 0, 1, 0, 1, 0, 0,\
+-		0, 1, 1, 1, 0, 0, 1, 1, 0, 1,\
+-		0, 1, 1, 0, 0, 1, 0, 1, 1, 0,\
+-		1, 1, 0, 1, 1, 0, 0\
+-	}
+-
+-#define KILLER_PATTERN_BIT_STATE\
+-	{\
+-		1, 0, 1, 1, 0, 0, 1, 0, 1, 0,\
+-		1, 1, 0, 1, 0, 0, 1, 0, 1, 0,\
+-		1, 0, 1, 1, 0, 1, 0, 1, 0, 0,\
+-		0, 0, 0, 1, 0, 0, 1, 1, 0, 1,\
+-		0, 1, 1, 0, 0, 1, 0, 1, 0, 0,\
+-		0, 0, 0, 1, 1, 1, 1\
+-	}
+diff --git a/tools/marvell/bin_hdr/src_ddr/ddr3libv2/h/Os/gtOs/mvXor.h b/tools/marvell/bin_hdr/src_ddr/ddr3libv2/h/Os/gtOs/mvXor.h
+new file mode 100644
+index 0000000..678a129
+--- /dev/null
++++ b/tools/marvell/bin_hdr/src_ddr/ddr3libv2/h/Os/gtOs/mvXor.h
+@@ -0,0 +1,264 @@
++/*******************************************************************************
++Copyright (C) Marvell International Ltd. and its affiliates
++This software file (the "File") is owned and distributed by Marvell
++International Ltd. and/or its affiliates ("Marvell") under the following
++alternative licensing terms.  Once you have made an election to distribute the
++File under one of the following license alternatives, please (i) delete this
++introductory statement regarding license alternatives, (ii) delete the two
++license alternatives that you have not elected to use and (iii) preserve the
++Marvell copyright notice above.
++
++********************************************************************************
++Marvell Commercial License Option
++
++If you received this File from Marvell and you have entered into a commercial
++license agreement (a "Commercial License") with Marvell, the File is licensed
++to you under the terms of the applicable Commercial License.
++
++********************************************************************************
++Marvell GPL License Option
++If you received this File from Marvell, you may opt to use, redistribute and/or
++modify this File in accordance with the terms and conditions of the General
++Public License Version 2, June 1991 (the "GPL License"), a copy of which is
++available along with the File in the license.txt file or by writing to the Free
++Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 or
++on the worldwide web at http://www.gnu.org/licenses/gpl.txt.
++
++THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE IMPLIED
++WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE ARE EXPRESSLY
++DISCLAIMED.  The GPL License provides additional details about this warranty
++disclaimer.
++********************************************************************************
++Marvell BSD License Option
++If you received this File from Marvell, you may opt to use, redistribute and/or
++modify this File under the following licensing terms.
++Redistribution and use in source and binary forms, with or without modification,
++are permitted provided that the following conditions are met:
++
++    *   Redistributions of source code must retain the above copyright notice,
++	this list of conditions and the following disclaimer.
++
++    *   Redistributions in binary form must reproduce the above copyright
++	notice, this list of conditions and the following disclaimer in the
++	documentation and/or other materials provided with the distribution.
++
++    *   Neither the name of Marvell nor the names of its contributors may be
++	used to endorse or promote products derived from this software without
++	specific prior written permission.
++
++THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
++ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
++ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
++ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++
++*******************************************************************************/
++
++/*******************************************************************************
++* mvXor.h - Header File for :
++*
++* DESCRIPTION:
++*       This file contains Marvell Controller XOR HW library API.
++*       NOTE: This HW library API assumes XOR source, destination and
++*       descriptors are cache coherent.
++*
++* DEPENDENCIES:
++*       None.
++*
++*******************************************************************************/
++
++#ifndef __INCMVxorh
++#define __INCMVxorh
++
++#define SRAM_BASE       	0x40000000
++
++#include "gtGenTypes.h"
++#include "mv_os.h"
++#include "printf.h"
++#include "ddr3_hws_hw_training_def.h"
++
++#define MV_XOR_MAX_UNIT					2 /* XOR unit == XOR engine */
++#define MV_XOR_MAX_CHAN         		4 /* total channels for all units together*/
++#define MV_XOR_MAX_CHAN_PER_UNIT		2 /* channels for units */
++
++#define MV_IS_POWER_OF_2(num) ((num != 0) && ((num & (num - 1)) == 0))
++
++/* typedefs */
++/* This structure describes address space window. Window base can be        */
++/* 64 bit, window size up to 4GB                                            */
++typedef struct _mvAddrWin {
++	GT_U32 baseLow;		/* 32bit base low       */
++	GT_U32 baseHigh;	/* 32bit base high      */
++	GT_U32 size;		/* 32bit size           */
++} MV_ADDR_WIN;
++
++
++/* This structure describes SoC units address decode window	*/
++typedef struct {
++	MV_ADDR_WIN addrWin;	/* An address window */
++	GT_BOOL enable;		/* Address decode window is enabled/disabled    */
++	GT_U8 attrib;		/* chip select attributes */
++	GT_U8 targetId;		/* Target Id of this MV_TARGET */
++} MV_UNIT_WIN_INFO;
++
++
++/* This enumerator describes the type of functionality the XOR channel      */
++/* can have while using the same data structures.                           */
++	typedef enum _mvXorType {
++		MV_XOR,		/* XOR channel functions as XOR accelerator     */
++		MV_DMA,		/* XOR channel functions as IDMA channel        */
++		MV_CRC32	/* XOR channel functions as CRC 32 calculator   */
++	} MV_XOR_TYPE;
++
++	
++	/* This enumerator describes the set of commands that can be applied on   	*/
++	/* an engine (e.g. IDMA, XOR). Appling a comman depends on the current   	*/
++	/* status (see MV_STATE enumerator)                      					*/
++	/* Start can be applied only when status is IDLE                         */
++	/* Stop can be applied only when status is IDLE, ACTIVE or PAUSED        */
++	/* Pause can be applied only when status is ACTIVE                          */
++	/* Restart can be applied only when status is PAUSED                        */
++	typedef enum _mvCommand {
++		MV_START,		/* Start     */
++		MV_STOP,		/* Stop     */
++	  	MV_PAUSE,		/* Pause    */
++	  	MV_RESTART		/* Restart  */
++	} MV_COMMAND;
++	
++	
++	/* This enumerator describes the set of state conditions.					*/
++	/* Moving from one state to other is stricted.   							*/
++	typedef enum _mvState {
++		MV_IDLE,
++  		MV_ACTIVE,
++  		MV_PAUSED,
++  		MV_UNDEFINED_STATE
++	} MV_STATE;
++
++	/* Controller peripherals are designated memory/IO address spaces that the  */
++	/* controller can access. They are also refered as "targets"                */
++	typedef enum _mvTarget {
++		TBL_TERM = -1, 	/* none valid target, used as targets list terminator*/
++  		SRAM,
++		SDRAM_CS0,	/*0 SDRAM chip select 0		*/
++/*		SDRAM_CS1, */ /*1 SDRAM chip select 1		*/ 
++/*		SDRAM_CS2, */ /*2 SDRAM chip select 2		*/ 
++/*		SDRAM_CS3, */ /*3 SDRAM chip select 3		*/ 
++  		MAX_TARGETS
++	} MV_TARGET;
++
++#if defined(MV_CPU_LE)
++	/* This structure describes XOR descriptor size 64bytes                     */
++	typedef struct _mvXorDesc {
++		GT_U32 status;	/* Successful descriptor execution indication */
++		GT_U32 crc32Result;	/* Result of CRC-32 calculation */
++		GT_U32 descCommand;	/* type of operation to be carried out on the data */
++		GT_U32 phyNextDescPtr;	/* Next descriptor address pointer */
++		GT_U32 byteCnt;	/* Size of source and destination blocks in bytes */
++		GT_U32 phyDestAdd;	/* Destination Block address pointer */
++		GT_U32 srcAdd0;	/* source block #0 address pointer */
++		GT_U32 srcAdd1;	/* source block #1 address pointer */
++		GT_U32 srcAdd2;	/* source block #2 address pointer */
++		GT_U32 srcAdd3;	/* source block #3 address pointer */
++		GT_U32 srcAdd4;	/* source block #4 address pointer */
++		GT_U32 srcAdd5;	/* source block #6 address pointer */
++		GT_U32 srcAdd6;	/* source block #6 address pointer */
++		GT_U32 srcAdd7;	/* source block #7 address pointer */
++		GT_U32 reserved0;
++		GT_U32 reserved1;
++	} MV_XOR_DESC;
++
++/* XOR descriptor structure for CRC and DMA descriptor */
++	typedef struct _mvCrcDmaDesc {
++		GT_U32 status;	/* Successful descriptor execution indication */
++		GT_U32 crc32Result;	/* Result of CRC-32 calculation */
++		GT_U32 descCommand;	/* type of operation to be carried out on the data */
++		GT_U32 nextDescPtr;	/* Next descriptor address pointer */
++		GT_U32 byteCnt;	/* Size of source block part represented by the descriptor */
++		GT_U32 destAdd;	/* Destination Block address pointer (not used in CRC32 */
++		GT_U32 srcAdd0;	/* Mode: Source Block address pointer */
++		GT_U32 srcAdd1;	/* Mode: Source Block address pointer */
++	} MV_CRC_DMA_DESC;
++
++#elif defined(MV_CPU_BE)
++/* This structure describes XOR descriptor size 64bytes                     */
++	typedef struct _mvXorDesc {
++		GT_U32 crc32Result;	/* Result of CRC-32 calculation */
++		GT_U32 status;	/* Successful descriptor execution indication */
++		GT_U32 phyNextDescPtr;	/* Next descriptor address pointer */
++		GT_U32 descCommand;	/* type of operation to be carried out on the data */
++		GT_U32 phyDestAdd;	/* Destination Block address pointer */
++		GT_U32 byteCnt;	/* Size of source and destination blocks in bytes */
++		GT_U32 srcAdd1;	/* source block #1 address pointer */
++		GT_U32 srcAdd0;	/* source block #0 address pointer */
++		GT_U32 srcAdd3;	/* source block #3 address pointer */
++		GT_U32 srcAdd2;	/* source block #2 address pointer */
++		GT_U32 srcAdd5;	/* source block #5 address pointer */
++		GT_U32 srcAdd4;	/* source block #4 address pointer */
++		GT_U32 srcAdd7;	/* source block #7 address pointer */
++		GT_U32 srcAdd6;	/* source block #6 address pointer */
++		GT_U32 reserved0;
++		GT_U32 reserved1;
++	} MV_XOR_DESC;
++
++/* XOR descriptor structure for CRC and DMA descriptor */
++	typedef struct _mvCrcDmaDesc {
++		GT_U32 crc32Result;	/* Result of CRC-32 calculation */
++		GT_U32 status;	/* Successful descriptor execution indication */
++		GT_U32 nextDescPtr;	/* Next descriptor address pointer */
++		GT_U32 descCommand;	/* type of operation to be carried out on the data */
++		GT_U32 destAdd;	/* Destination Block address pointer (not used in CRC32 */
++		GT_U32 byteCnt;	/* Size of source block part represented by the descriptor */
++		GT_U32 srcAdd1;	/* Mode: Source Block address pointer */
++		GT_U32 srcAdd0;	/* Mode: Source Block address pointer */
++	} MV_CRC_DMA_DESC;
++
++#endif
++
++	typedef struct _mvXorEcc {
++		GT_U32 destPtr;	/* Target block pointer to ECC/MemInit operation */
++		GT_U32 blockSize;	/* Block size in bytes for ECC/MemInit operation */
++		GT_BOOL periodicEnable;	/* Enable Timer Mode                                                         */
++		GT_U32 tClkTicks;	/* ECC timer mode initial count - down value     */
++		GT_U32 sectorSize;	/* section size for ECC timer mode operation     */
++	} MV_XOR_ECC;
++
++	typedef enum _mvXorOverrideTarget {
++		SRC_ADDR0,	/* Source Address #0 Control */
++		SRC_ADDR1,	/* Source Address #1 Control */
++		SRC_ADDR2,	/* Source Address #2 Control */
++		SRC_ADDR3,	/* Source Address #3 Control */
++		SRC_ADDR4,	/* Source Address #4 Control */
++		SRC_ADDR5,	/* Source Address #5 Control */
++		SRC_ADDR6,	/* Source Address #6 Control */
++		SRC_ADDR7,	/* Source Address #7 Control */
++		XOR_DST_ADDR,	/* Destination Address Control */
++		XOR_NEXT_DESC	/* Next Descriptor Address Control */
++	} MV_XOR_OVERRIDE_TARGET;
++
++	GT_VOID mvSysXorInit(GT_U32 uiNumOfCS, GT_U32 uiCsEna, GT_U32 csSize, GT_U32 baseDelta);
++	GT_VOID mvSysXorFinish(void);
++	GT_VOID mvXorHalInit(GT_U32 xorChanNum);
++	GT_STATUS mvXorCtrlSet(GT_U32 chan, GT_U32 xorCtrl);
++	GT_STATUS mvXorEccClean(GT_U32 chan, MV_XOR_ECC *pXorEccConfig);
++	GT_U32 mvXorEccCurrTimerGet(GT_U32 chan, GT_U32 tClk);
++	GT_STATUS mvXorMemInit(GT_U32 chan, GT_U32 startPtr, GT_U32 blockSize, GT_U32 initValHigh, GT_U32 initValLow);
++	GT_STATUS mvXorTransfer(GT_U32 chan, MV_XOR_TYPE xorType, GT_U32 xorChainPtr);
++	MV_STATE mvXorStateGet(GT_U32 chan);
++	GT_STATUS mvXorCommandSet(GT_U32 chan, MV_COMMAND command);
++	GT_STATUS mvXorOverrideSet(GT_U32 chan, MV_XOR_OVERRIDE_TARGET target, GT_U32 winNum, GT_BOOL enable);
++
++	GT_STATUS mvXorWinInit(MV_UNIT_WIN_INFO *addrWinMap);
++	GT_STATUS mvXorTargetWinWrite(GT_U32 unit, GT_U32 winNum,MV_UNIT_WIN_INFO *pAddrDecWin);
++	GT_STATUS mvXorTargetWinRead(GT_U32 unit, GT_U32 winNum,MV_UNIT_WIN_INFO *pAddrDecWin);
++	GT_STATUS mvXorTargetWinEnable(GT_U32 unit, GT_U32 winNum, GT_BOOL enable);
++	GT_STATUS mvXorProtWinSet(GT_U32 unit, GT_U32 chan, GT_U32 winNum, GT_BOOL access, GT_BOOL write);
++	GT_STATUS mvXorPciRemap(GT_U32 unit, GT_U32 winNum, GT_U32 addrHigh);
++
++	
++#endif
+diff --git a/tools/marvell/bin_hdr/src_ddr/ddr3libv2/h/Os/gtOs/mvXorRegs.h b/tools/marvell/bin_hdr/src_ddr/ddr3libv2/h/Os/gtOs/mvXorRegs.h
+new file mode 100644
+index 0000000..2f3dbe7
+--- /dev/null
++++ b/tools/marvell/bin_hdr/src_ddr/ddr3libv2/h/Os/gtOs/mvXorRegs.h
+@@ -0,0 +1,280 @@
++/*******************************************************************************
++Copyright (C) Marvell International Ltd. and its affiliates
++This software file (the "File") is owned and distributed by Marvell
++International Ltd. and/or its affiliates ("Marvell") under the following
++alternative licensing terms.  Once you have made an election to distribute the
++File under one of the following license alternatives, please (i) delete this
++introductory statement regarding license alternatives, (ii) delete the two
++license alternatives that you have not elected to use and (iii) preserve the
++Marvell copyright notice above.
++
++********************************************************************************
++Marvell Commercial License Option
++
++If you received this File from Marvell and you have entered into a commercial
++license agreement (a "Commercial License") with Marvell, the File is licensed
++to you under the terms of the applicable Commercial License.
++
++********************************************************************************
++Marvell GPL License Option
++If you received this File from Marvell, you may opt to use, redistribute and/or
++modify this File in accordance with the terms and conditions of the General
++Public License Version 2, June 1991 (the "GPL License"), a copy of which is
++available along with the File in the license.txt file or by writing to the Free
++Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 or
++on the worldwide web at http://www.gnu.org/licenses/gpl.txt.
++
++THE FILE IS DISTRIBUTED AS-IS, WITHOUT WARRANTY OF ANY KIND, AND THE IMPLIED
++WARRANTIES OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE ARE EXPRESSLY
++DISCLAIMED.  The GPL License provides additional details about this warranty
++disclaimer.
++********************************************************************************
++Marvell BSD License Option
++If you received this File from Marvell, you may opt to use, redistribute and/or
++modify this File under the following licensing terms.
++Redistribution and use in source and binary forms, with or without modification,
++are permitted provided that the following conditions are met:
++
++    *   Redistributions of source code must retain the above copyright notice,
++	this list of conditions and the following disclaimer.
++
++    *   Redistributions in binary form must reproduce the above copyright
++	notice, this list of conditions and the following disclaimer in the
++	documentation and/or other materials provided with the distribution.
++
++    *   Neither the name of Marvell nor the names of its contributors may be
++	used to endorse or promote products derived from this software without
++	specific prior written permission.
++
++THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
++ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
++ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
++ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++*******************************************************************************/
++
++#ifndef __INCmvXorSpech
++#define __INCmvXorSpech
++
++/* defines */
++
++/* for controllers that have two XOR units, then chans 2 & 3 will be mapped*/
++/* to channels 0 & 1 of unit 1 */
++#define XOR_UNIT(chan)	((chan) >> 1)
++#define XOR_CHAN(chan)  ((chan) & 1)
++
++#ifdef CONFIG_ALLEYCAT3
++#define MV_XOR_REGS_OFFSET(unit)		(0xf0800)
++#else
++#define MV_XOR_REGS_OFFSET(unit)		(0x60900)
++#endif
++#define MV_XOR_REGS_BASE(unit)		(MV_XOR_REGS_OFFSET(unit))
++
++/* XOR Engine Control Register Map */
++#define XOR_CHANNEL_ARBITER_REG(unit)       (MV_XOR_REGS_BASE(unit))
++#define XOR_CONFIG_REG(unit, chan)           (MV_XOR_REGS_BASE(unit)+(0x10 + ((chan) * 4)))
++#define XOR_ACTIVATION_REG(unit, chan)       (MV_XOR_REGS_BASE(unit)+(0x20 + ((chan) * 4)))
++
++/* XOR Engine Interrupt Register Map */
++#define XOR_CAUSE_REG(unit)         (MV_XOR_REGS_BASE(unit)+(0x30))
++#define XOR_MASK_REG(unit)   	    (MV_XOR_REGS_BASE(unit)+(0x40))
++#define XOR_ERROR_CAUSE_REG(unit)   (MV_XOR_REGS_BASE(unit)+(0x50))
++#define XOR_ERROR_ADDR_REG(unit)    (MV_XOR_REGS_BASE(unit)+(0x60))
++
++/* XOR Engine Descriptor Register Map */
++#define XOR_NEXT_DESC_PTR_REG(unit, chan) (MV_XOR_REGS_BASE(unit)+(0x200 + ((chan) * 4)))
++#define XOR_CURR_DESC_PTR_REG(unit, chan) (MV_XOR_REGS_BASE(unit)+(0x210 + ((chan) * 4)))
++#define XOR_BYTE_COUNT_REG(unit, chan)    (MV_XOR_REGS_BASE(unit)+(0x220 + ((chan) * 4)))
++
++/* XOR Engine ECC/MemInit Register Map */
++#define XOR_DST_PTR_REG(unit, chan)          (MV_XOR_REGS_BASE(unit)+(0x2B0 + ((chan) * 4)))
++#define XOR_BLOCK_SIZE_REG(unit, chan)       (MV_XOR_REGS_BASE(unit)+(0x2C0 + ((chan) * 4)))
++#define XOR_TIMER_MODE_CTRL_REG(unit)       (MV_XOR_REGS_BASE(unit)+(0x2D0))
++#define XOR_TIMER_MODE_INIT_VAL_REG(unit)   (MV_XOR_REGS_BASE(unit)+(0x2D4))
++#define XOR_TIMER_MODE_CURR_VAL_REG(unit)   (MV_XOR_REGS_BASE(unit)+(0x2D8))
++#define XOR_INIT_VAL_LOW_REG(unit)          (MV_XOR_REGS_BASE(unit)+(0x2E0))
++#define XOR_INIT_VAL_HIGH_REG(unit)         (MV_XOR_REGS_BASE(unit)+(0x2E4))
++
++/* XOR Engine Debug Register Map */
++#define XOR_DEBUG_REG(unit)                 (MV_XOR_REGS_BASE(unit)+(0x70))
++
++
++/* XOR register fileds */
++
++
++/* XOR Engine Channel Arbiter Register */
++#define XECAR_SLICE_OFFS(sliceNum)          (sliceNum)
++#define XECAR_SLICE_MASK(sliceNum)          (1 << (XECAR_SLICE_OFFS(sliceNum)))
++
++/* XOR Engine [0..1] Configuration Registers (XExCR) */
++#define XEXCR_OPERATION_MODE_OFFS           (0)
++#define XEXCR_OPERATION_MODE_MASK           (7 << XEXCR_OPERATION_MODE_OFFS)
++#define XEXCR_OPERATION_MODE_XOR            (0 << XEXCR_OPERATION_MODE_OFFS)
++#define XEXCR_OPERATION_MODE_CRC            (1 << XEXCR_OPERATION_MODE_OFFS)
++#define XEXCR_OPERATION_MODE_DMA            (2 << XEXCR_OPERATION_MODE_OFFS)
++#define XEXCR_OPERATION_MODE_ECC            (3 << XEXCR_OPERATION_MODE_OFFS)
++#define XEXCR_OPERATION_MODE_MEM_INIT       (4 << XEXCR_OPERATION_MODE_OFFS)
++
++#define XEXCR_SRC_BURST_LIMIT_OFFS          (4)
++#define XEXCR_SRC_BURST_LIMIT_MASK          (7 << XEXCR_SRC_BURST_LIMIT_OFFS)
++#define XEXCR_DST_BURST_LIMIT_OFFS          (8)
++#define XEXCR_DST_BURST_LIMIT_MASK          (7 << XEXCR_DST_BURST_LIMIT_OFFS)
++#define XEXCR_DRD_RES_SWP_OFFS              (12)
++#define XEXCR_DRD_RES_SWP_MASK              (1 << XEXCR_DRD_RES_SWP_OFFS)
++#define XEXCR_DWR_REQ_SWP_OFFS              (13)
++#define XEXCR_DWR_REQ_SWP_MASK              (1 << XEXCR_DWR_REQ_SWP_OFFS)
++#define XEXCR_DES_SWP_OFFS                  (14)
++#define XEXCR_DES_SWP_MASK                  (1 << XEXCR_DES_SWP_OFFS)
++#define XEXCR_REG_ACC_PROTECT_OFFS          (15)
++#define XEXCR_REG_ACC_PROTECT_MASK          (1 << XEXCR_REG_ACC_PROTECT_OFFS)
++
++
++/* XOR Engine [0..1] Activation Registers (XExACTR) */
++#define XEXACTR_XESTART_OFFS                (0)
++#define XEXACTR_XESTART_MASK                (1 << XEXACTR_XESTART_OFFS)
++#define XEXACTR_XESTOP_OFFS                 (1)
++#define XEXACTR_XESTOP_MASK                 (1 << XEXACTR_XESTOP_OFFS)
++#define XEXACTR_XEPAUSE_OFFS                (2)
++#define XEXACTR_XEPAUSE_MASK                (1 << XEXACTR_XEPAUSE_OFFS)
++#define XEXACTR_XERESTART_OFFS              (3)
++#define XEXACTR_XERESTART_MASK              (1 << XEXACTR_XERESTART_OFFS)
++#define XEXACTR_XESTATUS_OFFS               (4)
++#define XEXACTR_XESTATUS_MASK               (3 << XEXACTR_XESTATUS_OFFS)
++#define XEXACTR_XESTATUS_IDLE               (0 << XEXACTR_XESTATUS_OFFS)
++#define XEXACTR_XESTATUS_ACTIVE             (1 << XEXACTR_XESTATUS_OFFS)
++#define XEXACTR_XESTATUS_PAUSED             (2 << XEXACTR_XESTATUS_OFFS)
++
++/* XOR Engine Interrupt Cause Register (XEICR) */
++#define XEICR_CHAN_OFFS					16
++#define XEICR_CAUSE_OFFS(chan)   		(chan * XEICR_CHAN_OFFS)
++#define XEICR_CAUSE_MASK(chan, cause)   (1 << (cause + XEICR_CAUSE_OFFS(chan)))
++#define XEICR_COMP_MASK_ALL				0x000f000f
++#define XEICR_COMP_MASK(chan)			(0x000f << XEICR_CAUSE_OFFS(chan))
++#define XEICR_ERR_MASK					0x03800380
++
++/* XOR Engine Error Cause Register (XEECR) */
++#define XEECR_ERR_TYPE_OFFS				0
++#define XEECR_ERR_TYPE_MASK				(0x1f << XEECR_ERR_TYPE_OFFS)
++
++/* XOR Engine Error Address Register (XEEAR) */
++#define XEEAR_ERR_ADDR_OFFS                 (0)
++#define XEEAR_ERR_ADDR_MASK                 (0xFFFFFFFF << XEEAR_ERR_ADDR_OFFS)
++
++/* XOR Engine [0..1] Next Descriptor Pointer Register (XExNDPR) */
++#define XEXNDPR_NEXT_DESC_PTR_OFFS          (0)
++#define XEXNDPR_NEXT_DESC_PTR_MASK          (0xFFFFFFFF << XEXNDPR_NEXT_DESC_PTR_OFFS)
++
++/* XOR Engine [0..1] Current Descriptor Pointer Register (XExCDPR) */
++#define XEXCDPR_CURRENT_DESC_PTR_OFFS       (0)
++#define XEXCDPR_CURRENT_DESC_PTR_MASK       (0xFFFFFFFF << XEXCDPR_CURRENT_DESC_PTR_OFFS)
++
++/* XOR Engine [0..1] Byte Count Register (XExBCR) */
++#define XEXBCR_BYTE_CNT_OFFS                (0)
++#define XEXBCR_BYTE_CNT_MASK                (0xFFFFFFFF << XEXBCR_BYTE_CNT_OFFS)
++
++/* XOR Engine [0..1] Destination Pointer Register (XExDPR0) */
++#define XEXDPR_DST_PTR_OFFS                 (0)
++#define XEXDPR_DST_PTR_MASK                 (0xFFFFFFFF << XEXDPR_DST_PTR_OFFS)
++#define XEXDPR_DST_PTR_XOR_MASK             (0x3F)
++#define XEXDPR_DST_PTR_DMA_MASK             (0x1F)
++#define XEXDPR_DST_PTR_CRC_MASK             (0x1F)
++
++/* XOR Engine[0..1] Block Size Registers (XExBSR) */
++#define XEXBSR_BLOCK_SIZE_OFFS              (0)
++#define XEXBSR_BLOCK_SIZE_MASK              (0xFFFFFFFF << XEXBSR_BLOCK_SIZE_OFFS)
++#define XEXBSR_BLOCK_SIZE_MIN_VALUE         (128)
++#define XEXBSR_BLOCK_SIZE_MAX_VALUE         (0xFFFFFFFF)
++
++/* XOR Engine Timer Mode Control Register (XETMCR) */
++#define XETMCR_TIMER_EN_OFFS                (0)
++#define XETMCR_TIMER_EN_MASK                (1 << XETMCR_TIMER_EN_OFFS)
++#define XETMCR_TIMER_EN_ENABLE              (1 << XETMCR_TIMER_EN_OFFS)
++#define XETMCR_TIMER_EN_DISABLE             (0 << XETMCR_TIMER_EN_OFFS)
++#define XETMCR_SECTION_SIZE_CTRL_OFFS       (8)
++#define XETMCR_SECTION_SIZE_CTRL_MASK       (0x1F << XETMCR_SECTION_SIZE_CTRL_OFFS)
++#define XETMCR_SECTION_SIZE_MIN_VALUE       (7)
++#define XETMCR_SECTION_SIZE_MAX_VALUE       (31)
++
++/* XOR Engine Timer Mode Initial Value Register (XETMIVR) */
++#define XETMIVR_TIMER_INIT_VAL_OFFS         (0)
++#define XETMIVR_TIMER_INIT_VAL_MASK         (0xFFFFFFFF << XETMIVR_TIMER_INIT_VAL_OFFS)
++
++/* XOR Engine Timer Mode Current Value Register (XETMCVR) */
++#define XETMCVR_TIMER_CRNT_VAL_OFFS         (0)
++#define XETMCVR_TIMER_CRNT_VAL_MASK         (0xFFFFFFFF << XETMCVR_TIMER_CRNT_VAL_OFFS)
++
++/* XOR Engine Initial Value Register Low (XEIVRL) */
++#define XEIVRL_INIT_VAL_L_OFFS              (0)
++#define XEIVRL_INIT_VAL_L_MASK              (0xFFFFFFFF << XEIVRL_INIT_VAL_L_OFFS)
++
++/* XOR Engine Initial Value Register High (XEIVRH) */
++#define XEIVRH_INIT_VAL_H_OFFS              (0)
++#define XEIVRH_INIT_VAL_H_MASK              (0xFFFFFFFF << XEIVRH_INIT_VAL_H_OFFS)
++
++/* XOR Engine Debug Register (XEDBR) */
++#define XEDBR_PARITY_ERR_INSR_OFFS          (0)
++#define XEDBR_PARITY_ERR_INSR_MASK          (1 << XEDBR_PARITY_ERR_INSR_OFFS)
++#define XEDBR_XBAR_ERR_INSR_OFFS            (1)
++#define XEDBR_XBAR_ERR_INSR_MASK            (1 << XEDBR_XBAR_ERR_INSR_OFFS)
++
++
++/* XOR Engine address decode registers.	*/
++
++#define XOR_MAX_ADDR_DEC_WIN	8	/* Maximum address decode windows		*/
++#define XOR_MAX_REMAP_WIN       4	/* Maximum address arbiter windows		*/
++
++/* XOR Engine Address Decoding Register Map */
++#define XOR_WINDOW_CTRL_REG(unit, chan)     (MV_XOR_REGS_BASE(unit)+(0x240 + ((chan) * 4)))
++#define XOR_BASE_ADDR_REG(unit, winNum)     (MV_XOR_REGS_BASE(unit)+(0x250 + ((winNum) * 4)))
++#define XOR_SIZE_MASK_REG(unit, winNum)     (MV_XOR_REGS_BASE(unit)+(0x270 + ((winNum) * 4)))
++#define XOR_HIGH_ADDR_REMAP_REG(unit, winNum) (MV_XOR_REGS_BASE(unit)+(0x290 + ((winNum) * 4)))
++#define XOR_ADDR_OVRD_REG(unit, winNum) 	(MV_XOR_REGS_BASE(unit)+(0x2A0 + ((winNum) * 4)))
++
++/* XOR Engine [0..1] Window Control Registers (XExWCR) */
++#define XEXWCR_WIN_EN_OFFS(winNum)          (winNum)
++#define XEXWCR_WIN_EN_MASK(winNum)          (1 << (XEXWCR_WIN_EN_OFFS(winNum)))
++#define XEXWCR_WIN_EN_ENABLE(winNum)        (1 << (XEXWCR_WIN_EN_OFFS(winNum)))
++#define XEXWCR_WIN_EN_DISABLE(winNum)       (0 << (XEXWCR_WIN_EN_OFFS(winNum)))
++
++#define XEXWCR_WIN_ACC_OFFS(winNum)         ((2 * winNum) + 16)
++#define XEXWCR_WIN_ACC_MASK(winNum)         (3 << (XEXWCR_WIN_ACC_OFFS(winNum)))
++#define XEXWCR_WIN_ACC_NO_ACC(winNum)       (0 << (XEXWCR_WIN_ACC_OFFS(winNum)))
++#define XEXWCR_WIN_ACC_RO(winNum)           (1 << (XEXWCR_WIN_ACC_OFFS(winNum)))
++#define XEXWCR_WIN_ACC_RW(winNum)           (3 << (XEXWCR_WIN_ACC_OFFS(winNum)))
++
++/* XOR Engine Base Address Registers (XEBARx) */
++#define XEBARX_TARGET_OFFS                  (0)
++#define XEBARX_TARGET_MASK                  (0xF << XEBARX_TARGET_OFFS)
++#define XEBARX_ATTR_OFFS                    (8)
++#define XEBARX_ATTR_MASK                    (0xFF << XEBARX_ATTR_OFFS)
++#define XEBARX_BASE_OFFS                    (16)
++#define XEBARX_BASE_MASK                    (0xFFFF << XEBARX_BASE_OFFS)
++
++
++/* XOR Engine Size Mask Registers (XESMRx) */
++#define XESMRX_SIZE_MASK_OFFS               (16)
++#define XESMRX_SIZE_MASK_MASK               (0xFFFF << XESMRX_SIZE_MASK_OFFS)
++#define XOR_WIN_SIZE_ALIGN		    _64K
++
++/* XOR Engine High Address Remap Register (XEHARRx1) */
++#define XEHARRX_REMAP_OFFS                  (0)
++#define XEHARRX_REMAP_MASK                  (0xFFFFFFFF << XEHARRX_REMAP_OFFS)
++
++
++#define XOR_OVERRIDE_CTRL_REG(chan)   (MV_XOR_REGS_BASE(XOR_UNIT(chan))+(0x2A0 + ((XOR_CHAN(chan)) * 4)))
++/* XOR Engine [0..1] Address Override Control Register (XExAOCR) */
++#define XEXAOCR_OVR_EN_OFFS(target)         (3 * target)
++#define XEXAOCR_OVR_EN_MASK(target)         (1 << (XEXAOCR_OVR_EN_OFFS(target)))
++#define XEXAOCR_OVR_PTR_OFFS(target)        ((3 * target) + 1)
++#define XEXAOCR_OVR_PTR_MASK(target)        (3 << (XEXAOCR_OVR_PTR_OFFS(target)))
++#define XEXAOCR_OVR_BAR(winNum, target)      (winNum << (XEXAOCR_OVR_PTR_OFFS(target)))
++
++#define XOR_MAX_OVERRIDE_WIN	4	/* Maximum address override windows		*/
++
++
++#endif	/* __INCmvXorSpech */
+diff --git a/tools/marvell/bin_hdr/src_ddr/ddr3libv2/src/Os/gtOs/mvXor.c b/tools/marvell/bin_hdr/src_ddr/ddr3libv2/src/Os/gtOs/mvXor.c
+index f02ae98..bae76b2 100755
+--- a/tools/marvell/bin_hdr/src_ddr/ddr3libv2/src/Os/gtOs/mvXor.c
++++ b/tools/marvell/bin_hdr/src_ddr/ddr3libv2/src/Os/gtOs/mvXor.c
+@@ -71,53 +71,34 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ #endif
+ 
+ static GT_U32 uiXorRegsCtrlBackup;
+-static GT_U32 uiXorRegsBaseBackup[MAX_CS + 1];
+-static GT_U32 uiXorRegsMaskBackup[MAX_CS + 1];
++static GT_U32 uiXorRegsBaseBackup[MAX_CS];
++static GT_U32 uiXorRegsMaskBackup[MAX_CS];
+ 
+ extern GT_U32 mvHwsDdr3TipMaxCSGet(GT_U32 devNum);
+ 
+-/*******************************************************************************
+-* mvSysXorInit
+-*
+-* DESCRIPTION:
+-*               This function initialize the XOR unit's windows.
+-* INPUT:
+-*       uiNumOfCS	- number of enabled chip select
+-*	uiCsEna		- bitmap of enabled chip selects:
+-*				bit[i] = 1 if chip select i is enabled (for 1 <= i <= 3)
+-*				bit[4] = if SRAM window is enabled
+-*	csSize		- size of DRAM chip select
+-*	baseDelta	- base start of the DRAM windows
+-*
+-*
+-*******************************************************************************/
+ GT_VOID mvSysXorInit(GT_U32 uiNumOfCS, GT_U32 uiCsEna, GT_U32 csSize, GT_U32 baseDelta)
+ {
+-	GT_U32 uiReg, ui, uiBase, uiCsCount, sizeMask;
++	GT_U32 uiReg,ui,uiBase,uiCsCount;
+ 
+ 	uiXorRegsCtrlBackup = MV_REG_READ(XOR_WINDOW_CTRL_REG(0, 0));
+-	for(ui = 0; ui < MAX_CS + 1; ui++)
++	for(ui=0;ui<MAX_CS;ui++)
+ 		uiXorRegsBaseBackup[ui] = MV_REG_READ(XOR_BASE_ADDR_REG(0, ui));
+-	for(ui = 0; ui < MAX_CS + 1; ui++)
++	for(ui=0;ui<MAX_CS;ui++)
+ 		uiXorRegsMaskBackup[ui] = MV_REG_READ(XOR_SIZE_MASK_REG(0, ui));
+ 
+ 	uiReg = 0;
+-	for (uiCsCount = 0, ui = 0; uiCsCount < uiNumOfCS && ui < 8; ui++) {
+-		if(uiCsEna & (1 << ui)) {
+-			uiReg |= (0x1 << (ui));			/* Enable Window x for each CS */
+-			uiReg |= (0x3 << ((ui*2)+16)); 		/* Enable Window x for each CS */
+-			uiCsCount++;
+-		}
++	for(ui=0;ui<(uiNumOfCS);ui++) {
++		uiReg |= (0x1 << (ui)); 					/* 	Enable Window x for each CS */
++		uiReg |= (0x3 << ((ui*2)+16)); 				/* 	Enable Window x for each CS */
+ 	}
+ 
+ 	MV_REG_WRITE(XOR_WINDOW_CTRL_REG(0, 0), uiReg);
+ 
+-	for (uiCsCount = 0, ui = 0; uiCsCount < uiNumOfCS && ui < 8; ui++) {
++	uiCsCount = 0;
++	for(ui=0;ui<uiNumOfCS;ui++) {
+ 		if(uiCsEna & (1<<ui)) {
+ 			/* window x - Base - 0x00000000, Attribute 0x0E - DRAM */
+ 			uiBase = csSize*ui + baseDelta;
+-			/* fixed size 2GB for each CS */
+-			sizeMask = 0x7FFF0000;
+ 			switch(ui) {
+ 				case 0:
+ 					uiBase |= 0xE00;
+@@ -131,16 +112,12 @@ GT_VOID mvSysXorInit(GT_U32 uiNumOfCS, GT_U32 uiCsEna, GT_U32 csSize, GT_U32 bas
+ 				case 3:
+ 					uiBase |= 0x700;
+ 					break;
+-				case 4: /* SRAM */
+-					uiBase = 0x40000000;
+-					uiBase |= 0x1F00; /* configure as shared transaction */
+-					sizeMask = 0xF0000;
+ 			}
+ 
+-			MV_REG_WRITE(XOR_BASE_ADDR_REG(0, ui), uiBase);
++			MV_REG_WRITE(XOR_BASE_ADDR_REG(0, uiCsCount), uiBase);
+ 
+ 			/* window x - Size*/
+-			MV_REG_WRITE(XOR_SIZE_MASK_REG(0, ui), sizeMask);
++			MV_REG_WRITE(XOR_SIZE_MASK_REG(0, uiCsCount), 0x7FFF0000);
+ 			uiCsCount++;
+ 		}
+ 	}
+@@ -154,9 +131,9 @@ GT_VOID mvSysXorFinish(void)
+ 	GT_U32 ui;
+ 
+ 	MV_REG_WRITE(XOR_WINDOW_CTRL_REG(0, 0), uiXorRegsCtrlBackup);
+-	for(ui = 0; ui < MAX_CS + 1; ui++)
++	for(ui=0;ui<MAX_CS;ui++)
+ 		MV_REG_WRITE(XOR_BASE_ADDR_REG(0, ui), uiXorRegsBaseBackup[ui]);
+-	for(ui = 0; ui < MAX_CS + 1; ui++)
++	for(ui=0;ui<MAX_CS;ui++)
+ 		MV_REG_WRITE(XOR_SIZE_MASK_REG(0, ui), uiXorRegsMaskBackup[ui]);
+ 
+ 	MV_REG_WRITE(XOR_ADDR_OVRD_REG(0, 0), 0);
+@@ -437,103 +414,4 @@ MV_VOID	ddr3NewTipEccScrub()
+     mvPrintf("DDR Training Sequence - End scrubbing \n");
+ }
+ 
+-/*******************************************************************************
+-* mvXorTransfer - Transfer data from source to destination on one of
+-*                 three modes (XOR,CRC32,DMA)
+-*
+-* DESCRIPTION:
+-*       This function initiates XOR channel, according to function parameters,
+-*       in order to perform XOR or CRC32 or DMA transaction.
+-*       To gain maximum performance the user is asked to keep the following
+-*       restrictions:
+-*       1) Selected engine is available (not busy).
+-*       1) This module does not take into consideration CPU MMU issues.
+-*          In order for the XOR engine to access the appropreate source
+-*          and destination, address parameters must be given in system
+-*          physical mode.
+-*       2) This API does not take care of cache coherency issues. The source,
+-*          destination and in case of chain the descriptor list are assumed
+-*          to be cache coherent.
+-*       4) Parameters validity. For example, does size parameter exceeds
+-*          maximum byte count of descriptor mode (16M or 64K).
+-*
+-* INPUT:
+-*       chan          - XOR channel number. See GT_XOR_CHANNEL enumerator.
+-*       xorType       - One of three: XOR, CRC32 and DMA operations.
+-*       xorChainPtr   - address of chain pointer
+-*
+-* OUTPUT:
+-*       None.
+-*
+-* RETURS:
+-*       GT_BAD_PARAM if parameters to function invalid, GT_OK otherwise.
+-*
+-*******************************************************************************/
+-GT_STATUS mvXorTransfer(GT_U32 chan, MV_XOR_TYPE xorType, GT_U32 xorChainPtr)
+-{
+-	GT_U32 temp;
+ 
+-	/* Parameter checking */
+-	if (chan >= MV_XOR_MAX_CHAN) {
+-		DB(mvPrintf("%s: ERR. Invalid chan num %d\n", __func__, chan));
+-		return GT_BAD_PARAM;
+-	}
+-	if (MV_ACTIVE == mvXorStateGet(chan)) {
+-		DB(mvPrintf("%s: ERR. Channel is already active\n", __func__));
+-		return GT_BUSY;
+-	}
+-	if (0x0 == xorChainPtr) {
+-		DB(mvPrintf("%s: ERR. xorChainPtr is NULL pointer\n", __func__));
+-		return GT_BAD_PARAM;
+-	}
+-
+-	/* read configuration register and mask the operation mode field */
+-	temp = MV_REG_READ(XOR_CONFIG_REG(XOR_UNIT(chan), XOR_CHAN(chan)));
+-	temp &= ~XEXCR_OPERATION_MODE_MASK;
+-
+-	switch (xorType) {
+-	case MV_XOR:
+-		if (0 != (xorChainPtr & XEXDPR_DST_PTR_XOR_MASK)) {
+-			DB(mvPrintf("%s: ERR. Invalid chain pointer (bits [5:0] must "
+-				      "be cleared)\n", __func__));
+-			return GT_BAD_PARAM;
+-		}
+-		/* set the operation mode to XOR */
+-		temp |= XEXCR_OPERATION_MODE_XOR;
+-		break;
+-
+-	case MV_DMA:
+-		if (0 != (xorChainPtr & XEXDPR_DST_PTR_DMA_MASK)) {
+-			DB(mvPrintf("%s: ERR. Invalid chain pointer (bits [4:0] must "
+-				      "be cleared)\n", __func__));
+-			return GT_BAD_PARAM;
+-		}
+-		/* set the operation mode to DMA */
+-		temp |= XEXCR_OPERATION_MODE_DMA;
+-		break;
+-
+-	case MV_CRC32:
+-		if (0 != (xorChainPtr & XEXDPR_DST_PTR_CRC_MASK)) {
+-			DB(mvPrintf("%s: ERR. Invalid chain pointer (bits [4:0] must "
+-				      "be cleared)\n", __func__));
+-			return GT_BAD_PARAM;
+-		}
+-		/* set the operation mode to CRC32 */
+-		temp |= XEXCR_OPERATION_MODE_CRC;
+-		break;
+-
+-	default:
+-		return GT_BAD_PARAM;
+-	}
+-
+-	/* write the operation mode to the register */
+-	MV_REG_WRITE(XOR_CONFIG_REG(XOR_UNIT(chan), XOR_CHAN(chan)), temp);
+-	/* update the NextDescPtr field in the XOR Engine [0..1] Next Descriptor
+-	   Pointer Register (XExNDPR) */
+-	MV_REG_WRITE(XOR_NEXT_DESC_PTR_REG(XOR_UNIT(chan), XOR_CHAN(chan)), xorChainPtr);
+-
+-	/* start transfer */
+-	MV_REG_BIT_SET(XOR_ACTIVATION_REG(XOR_UNIT(chan), XOR_CHAN(chan)), XEXACTR_XESTART_MASK);
+-
+-	return GT_OK;
+-}
+-- 
+1.9.1
+

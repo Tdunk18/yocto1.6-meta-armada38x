@@ -1,0 +1,25 @@
+From 8a52e8b050d75955c4f39341a7374361c5db4898 Mon Sep 17 00:00:00 2001
+From: Adam Lussier <adam.lussier@timesys.com>
+Date: Tue, 3 May 2016 16:49:50 -0400
+Subject: [PATCH] remove -msoft-float from PLATFORM_RELFLAGS
+
+---
+ arch/arm/cpu/armv7/config.mk | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm/cpu/armv7/config.mk b/arch/arm/cpu/armv7/config.mk
+index a831f67..105a404 100755
+--- a/arch/arm/cpu/armv7/config.mk
++++ b/arch/arm/cpu/armv7/config.mk
+@@ -20,7 +20,7 @@
+ # Foundation, Inc., 59 Temple Place, Suite 330, Boston,
+ # MA 02111-1307 USA
+ #
+-PLATFORM_RELFLAGS += -fno-common -ffixed-r8 -msoft-float
++PLATFORM_RELFLAGS += -fno-common -ffixed-r8
+ 
+ # If armv7-a is not supported by GCC fall-back to armv5, which is
+ # supported by more tool-chains
+-- 
+1.9.1
+

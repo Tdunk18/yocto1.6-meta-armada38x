@@ -1,8 +1,18 @@
+From cff69b3eda204ff199608cf323f94e4dbbba9798 Mon Sep 17 00:00:00 2001
+From: Adam Lussier <adam.lussier@timesys.com>
+Date: Tue, 3 May 2016 16:34:05 -0400
+Subject: [PATCH 6/6] change bootcmd to use stage_boot
+
+> stage_boot mmc_scr usb_scr
+---
+ board/mv_ebu/a38x/mv_main_a38x.c | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
 diff --git a/board/mv_ebu/a38x/mv_main_a38x.c b/board/mv_ebu/a38x/mv_main_a38x.c
-index 4b43a9c..5bbffa0 100755
+index 0dce7f6..9382050 100755
 --- a/board/mv_ebu/a38x/mv_main_a38x.c
 +++ b/board/mv_ebu/a38x/mv_main_a38x.c
-@@ -679,10 +679,7 @@ void misc_init_r_env(void)
+@@ -697,10 +697,7 @@ void misc_init_r_env(void)
  #if (CONFIG_BOOTDELAY >= 0)
  	env = getenv("bootcmd");
  	if (!env)
@@ -14,3 +24,6 @@ index 4b43a9c..5bbffa0 100755
  #endif  /* (CONFIG_BOOTDELAY >= 0) */
  
  	env = getenv("standalone");
+-- 
+1.9.1
+
